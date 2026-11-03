@@ -1,0 +1,515 @@
+"""
+CSAgent message handler — routes commands and cross-agent signals.
+Cross-agent in:
+  - DEAL_WON from SalesAgent → auto-create customer
+  - P1_BREACH from SupportAgent → flag at-risk
+"""
+import logging
+from datetime import datetime, date
+from shared.db import db_cursor
+from shared.llm import LLMClient
+from .health import calculate_health
+
+logger = logging.getLogger(__name__)
+llm = LLMClient(agent="cs")
+
+TENANT_ID = "default"
+
+
+def handle_message(client, payload: dict):
+    text       = payload.get("text", "").strip()
+    sender     = payload.get("sender", "")
+    is_mention = payload.get("is_mention", False)
+
+    if not text or sender in ("CSAgent", "NEXUS"):
+        return
+
+    # Cross-agent signals (not @mentions)
+    if text.startswith("DEAL_WON:"):
+        _handle_deal_won(client, text)
+        return
+    if text.startswith("P1_BREACH:"):
+        _handle_p1_breach(client, text)
+        return
+
+    if not is_mention:
+        return
+
+    clean = text.split(">", 1)[-1].strip() if ">" in text else text
+    for p in ["@CSAgent ", "@csagent "]:
+        if clean.lower().startswith(p.lower()):
+            clean = clean[len(p):]
+            break
+
+    _route_command(client, clean, sender)
+
+
+def _route_command(client, text: str, sender: str):
+    t = text.lower().strip()
+
+    if t.startswith("add customer:"):
+        _cmd_add_customer(client, text, sender)
+    elif t.startswith("health:"):
+        _cmd_health(client, text.split(":", 1)[1].strip())
+    elif t.startswith("at-risk") or t.startswith("at risk"):
+        _cmd_at_risk(client)
+    elif t.startswith("renewals"):
+        days = 30
+        if ":" in t:
+            try:
+                days = int(t.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        _cmd_renewals(client, days)
+    elif t.startswith("nps:"):
+        _cmd_log_nps(client, text, sender)
+    elif t.startswith("expansion:"):
+        _cmd_expansion(client, text.split(":", 1)[1].strip())
+    elif t.startswith("qbr:"):
+        _cmd_qbr(client, text.split(":", 1)[1].strip())
+    elif t.startswith("weekly report"):
+        _cmd_weekly_report(client)
+    elif t.startswith("patterns"):
+        _cmd_patterns(client)
+    elif t.startswith("memory"):
+        _cmd_memory(client)
+    elif t.startswith("knowledge:"):
+        _cmd_knowledge(client, text.split(":", 1)[1].strip())
+    else:
+        client.post_message(
+            "CSAgent commands:\n"
+            "- `@CSAgent add customer: Name, Rs500000, renewal: 2027-03-31`\n"
+            "- `@CSAgent health: CustomerName`\n"
+            "- `@CSAgent at-risk`\n"
+            "- `@CSAgent renewals` / `renewals: 30`\n"
+            "- `@CSAgent nps: Name, score: 7, note: feedback`\n"
+            "- `@CSAgent expansion: CustomerName`\n"
+            "- `@CSAgent qbr: CustomerName`\n"
+            "- `@CSAgent weekly report`"
+        )
+
+
+# ── Commands ───────────────────────────────────────────────────────────────────
+
+def _cmd_add_customer(client, text: str, sender: str):
+    """Parse: 'add customer: Name, Rs500000, renewal: 2027-03-31'"""
+    raw = text.split(":", 1)[1].strip()
+    # Extract renewal date if present
+    renewal_date = None
+    if "renewal:" in raw.lower():
+        idx = raw.lower().find("renewal:")
+        renewal_str = raw[idx + 8:].strip().split(",")[0].strip()
+        try:
+            renewal_date = datetime.strptime(renewal_str, "%Y-%m-%d").date()
+        except ValueError:
+            renewal_date = None
+        raw = raw[:idx].strip().rstrip(",")
+
+    parts = [p.strip() for p in raw.split(",")]
+    name  = parts[0] if parts else raw
+    arr   = _parse_money(parts[1]) if len(parts) > 1 else 0
+
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO customers (tenant_id, name, arr, renewal_date, assigned_csm)
+            VALUES (%s, %s, %s, %s, %s) RETURNING id
+            """,
+            (TENANT_ID, name, arr, renewal_date, f"@{sender}")
+        )
+        cid = cur.fetchone()["id"]
+
+    client.post_message(
+        f"Customer added (#{cid})\n"
+        f"*{name}* | ARR: {_fmt_v(arr)} | "
+        f"Renewal: {renewal_date or 'not set'} | CSM: @{sender}"
+    )
+
+
+def _cmd_health(client, name: str):
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT id, name, arr, renewal_date, nps, assigned_csm, health_score "
+            "FROM customers WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
+            (TENANT_ID, f"%{name}%")
+        )
+        cust = cur.fetchone()
+
+    if not cust:
+        client.post_message(f"Customer '{name}' not found.")
+        return
+
+    health = calculate_health(cust["id"], TENANT_ID)
+    icon = {"GREEN": "[GREEN]", "YELLOW": "[YELLOW]", "RED": "[RED]"}.get(health["level"], "")
+    renewal_str = str(cust["renewal_date"]) if cust["renewal_date"] else "not set"
+
+    lines = [
+        f"*{cust['name']}* {icon} Health: {health['score']}/100",
+        f"ARR: {_fmt_v(cust['arr'])} | NPS: {cust['nps'] or 'N/A'} | Renewal: {renewal_str}",
+        f"CSM: {cust['assigned_csm'] or 'unassigned'}",
+        f"\n*Health signals:*",
+    ]
+    for s in health["signals"]:
+        lines.append(f"- {s}")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_at_risk(client):
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT name, health_score, arr, assigned_csm, renewal_date
+            FROM customers
+            WHERE tenant_id=%s AND health_score < 70 AND status='active'
+            ORDER BY health_score ASC
+            """,
+            (TENANT_ID,)
+        )
+        rows = cur.fetchall()
+
+    if not rows:
+        client.post_message("No at-risk customers. All healthy!")
+        return
+
+    lines = ["*At-risk customers:*\n"]
+    for r in rows:
+        level = "RED" if r["health_score"] < 50 else "YELLOW"
+        lines.append(
+            f"- [{level}] *{r['name']}* | score {r['health_score']} | "
+            f"ARR {_fmt_v(r['arr'])} | CSM: {r['assigned_csm'] or 'unassigned'}"
+        )
+    client.post_message("\n".join(lines))
+
+
+def _cmd_renewals(client, days: int):
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT name, arr, renewal_date, health_score, assigned_csm
+            FROM customers
+            WHERE tenant_id=%s AND status='active'
+              AND renewal_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '%s days'
+            ORDER BY renewal_date ASC
+            """,
+            (TENANT_ID, days)
+        )
+        rows = cur.fetchall()
+
+    if not rows:
+        client.post_message(f"No renewals in the next {days} days.")
+        return
+
+    lines = [f"*Renewals in {days} days:*\n"]
+    for r in rows:
+        days_left = (r["renewal_date"] - date.today()).days
+        level = "GREEN" if r["health_score"] >= 70 else ("YELLOW" if r["health_score"] >= 50 else "RED")
+        lines.append(
+            f"- [{level}] *{r['name']}* | {_fmt_v(r['arr'])} | "
+            f"due {r['renewal_date']} ({days_left}d) | CSM: {r['assigned_csm'] or 'unassigned'}"
+        )
+    client.post_message("\n".join(lines))
+
+
+def _cmd_log_nps(client, text: str, sender: str):
+    """Parse: 'nps: CustomerName, score: 7, note: feedback text'"""
+    raw   = text.split(":", 1)[1].strip() if ":" in text else text
+    parts = raw.split(",")
+    name  = parts[0].strip()
+    score = None
+    note  = ""
+    for p in parts[1:]:
+        p = p.strip()
+        if p.lower().startswith("score:"):
+            try:
+                score = int(p.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        elif p.lower().startswith("note:"):
+            note = p.split(":", 1)[1].strip()
+
+    if score is None:
+        client.post_message("Usage: `@CSAgent nps: Name, score: 7, note: feedback`")
+        return
+
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE customers SET nps=%s WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) RETURNING id, name",
+            (score, TENANT_ID, f"%{name}%")
+        )
+        row = cur.fetchone()
+
+    if not row:
+        client.post_message(f"Customer '{name}' not found.")
+        return
+
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO customer_events (tenant_id, customer_id, event_type, notes)
+            VALUES (%s, %s, 'nps_logged', %s)
+            """,
+            (TENANT_ID, row["id"], f"NPS {score}: {note}")
+        )
+
+    label = "promoter" if score >= 9 else ("passive" if score >= 7 else "detractor")
+    client.post_message(f"NPS logged for *{row['name']}*: {score}/10 ({label})\n_{note}_")
+
+
+def _cmd_expansion(client, name: str):
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT id, name, arr, health_score, nps FROM customers "
+            "WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
+            (TENANT_ID, f"%{name}%")
+        )
+        cust = cur.fetchone()
+
+    if not cust:
+        client.post_message(f"Customer '{name}' not found.")
+        return
+
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT event_type, notes, created_at FROM customer_events "
+            "WHERE tenant_id=%s AND customer_id=%s ORDER BY created_at DESC LIMIT 10",
+            (TENANT_ID, cust["id"])
+        )
+        events = cur.fetchall()
+
+    signals = []
+    if cust["health_score"] >= 70:
+        signals.append(f"Health score {cust['health_score']} — satisfied customer")
+    if cust["nps"] and cust["nps"] >= 9:
+        signals.append(f"NPS {cust['nps']} — promoter, likely to expand")
+    if len(events) >= 5:
+        signals.append(f"High engagement: {len(events)} recent events")
+
+    prompt = (
+        f"Customer: {cust['name']}\n"
+        f"ARR: {_fmt_v(cust['arr'])}\n"
+        f"Health score: {cust['health_score']}\n"
+        f"NPS: {cust['nps']}\n"
+        f"Recent events: {', '.join([e['event_type'] for e in events[:5]])}\n\n"
+        f"Give 2-3 concrete expansion opportunities for this customer. Be specific. 3-4 bullet points."
+    )
+    suggestions = llm.complete(prompt)
+    client.post_message(
+        f"*Expansion signals for {cust['name']}:*\n"
+        + ("\n".join([f"- {s}" for s in signals]) or "No strong signals yet")
+        + f"\n\n*AI recommendations:*\n{suggestions}"
+    )
+
+
+def _cmd_qbr(client, name: str):
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT * FROM customers WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
+            (TENANT_ID, f"%{name}%")
+        )
+        cust = cur.fetchone()
+
+    if not cust:
+        client.post_message(f"Customer '{name}' not found.")
+        return
+
+    health = calculate_health(cust["id"], TENANT_ID)
+    prompt = (
+        f"Generate a QBR (Quarterly Business Review) agenda for customer: {cust['name']}\n"
+        f"ARR: {_fmt_v(cust['arr'])}\n"
+        f"Health score: {health['score']}/100 ({health['level']})\n"
+        f"NPS: {cust['nps'] or 'N/A'}\n"
+        f"Renewal date: {cust['renewal_date'] or 'unknown'}\n"
+        f"Key signals: {'; '.join(health['signals'])}\n\n"
+        f"Create a 5-point QBR agenda with time estimates. Focus on value delivery and renewal. "
+        f"Format as a numbered list."
+    )
+    agenda = llm.complete(prompt)
+    client.post_message(f"*QBR Agenda for {cust['name']}:*\n\n{agenda}")
+
+
+def _cmd_weekly_report(client):
+    with db_cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND status='active'", (TENANT_ID,))
+        total = cur.fetchone()["cnt"]
+        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND health_score < 50", (TENANT_ID,))
+        red = cur.fetchone()["cnt"]
+        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND health_score BETWEEN 50 AND 69", (TENANT_ID,))
+        yellow = cur.fetchone()["cnt"]
+        cur.execute(
+            "SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND renewal_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'",
+            (TENANT_ID,)
+        )
+        renewals = cur.fetchone()["cnt"]
+        cur.execute(
+            "SELECT name, arr FROM customers WHERE tenant_id=%s AND health_score < 50 ORDER BY arr DESC LIMIT 3",
+            (TENANT_ID,)
+        )
+        top_red = cur.fetchall()
+
+    lines = [
+        "*CS Weekly Report*\n",
+        f"Total active customers: {total}",
+        f"Health: {total - red - yellow} GREEN | {yellow} YELLOW | {red} RED",
+        f"Renewals in 30 days: {renewals}",
+    ]
+    if top_red:
+        lines.append("\n*Top at-risk by ARR:*")
+        for r in top_red:
+            lines.append(f"- {r['name']}: {_fmt_v(r['arr'])}")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_patterns(client):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("CSAgent", TENANT_ID)
+    patterns = mem.get_patterns(min_occurrences=2)
+    if not patterns:
+        client.post_message("No patterns detected yet. Keep using CSAgent and patterns will emerge.")
+        return
+    lines = ["*CSAgent learned patterns:*\n"]
+    for p in patterns[:5]:
+        lines.append(f"- {p['description']} (seen {p['occurrences']}x, confidence {p['confidence']:.0%})")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_memory(client):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("CSAgent", TENANT_ID)
+    events = mem.search_knowledge("")
+    if not events:
+        client.post_message("No memory events recorded yet.")
+        return
+    lines = ["*CSAgent recent memory:*\n"]
+    for ev in events[:5]:
+        lines.append(f"- [{ev['event_type']}] {str(ev['context'] or '')[:80]}")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_knowledge(client, query: str):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("CSAgent", TENANT_ID)
+    results = mem.search_knowledge(query)
+    if not results:
+        client.post_message(f"No memory found for '{query}'.")
+        return
+    lines = [f"*Knowledge search: '{query}'*\n"]
+    for r in results[:5]:
+        lines.append(f"- [{r['event_type']}] {str(r['outcome'] or r['context'] or '')[:100]}")
+    client.post_message("\n".join(lines))
+
+
+# ── Cross-agent signal handlers ────────────────────────────────────────────────
+
+def _handle_deal_won(client, text: str):
+    """DEAL_WON: customer=X arr=Y renewal_date=Z"""
+    parts = {}
+    for p in text.replace("DEAL_WON:", "").strip().split():
+        if "=" in p:
+            k, v = p.split("=", 1)
+            parts[k] = v
+
+    name         = parts.get("customer", "").replace("_", " ")
+    arr          = _parse_money(parts.get("arr", "0"))
+    renewal_str  = parts.get("renewal_date", "")
+
+    renewal_date = None
+    if renewal_str:
+        try:
+            renewal_date = datetime.strptime(renewal_str, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    if not name:
+        return
+
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO customers (tenant_id, name, arr, renewal_date, status)
+            VALUES (%s, %s, %s, %s, 'active')
+            ON CONFLICT DO NOTHING RETURNING id
+            """,
+            (TENANT_ID, name, arr, renewal_date)
+        )
+        row = cur.fetchone()
+
+    if row:
+        client.post_message(
+            f"*New customer onboarded* from SalesAgent deal win\n"
+            f"*{name}* | ARR: {_fmt_v(arr)} | Renewal: {renewal_date or 'not set'}"
+        )
+        logger.info(f"CSAgent created customer from DEAL_WON: {name}")
+
+
+def _handle_p1_breach(client, text: str):
+    """P1_BREACH: customer=X issue=Y"""
+    parts = {}
+    for p in text.replace("P1_BREACH:", "").strip().split():
+        if "=" in p:
+            k, v = p.split("=", 1)
+            parts[k] = v
+
+    customer = parts.get("customer", "").replace("_", " ")
+    issue    = parts.get("issue", "").replace("_", " ")
+
+    if not customer:
+        return
+
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT id, assigned_csm FROM customers WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
+            (TENANT_ID, f"%{customer}%")
+        )
+        cust = cur.fetchone()
+
+    if cust:
+        # Reduce health score
+        with db_cursor() as cur:
+            cur.execute(
+                "UPDATE customers SET health_score = GREATEST(health_score - 20, 0) WHERE id=%s",
+                (cust["id"],)
+            )
+            cur.execute(
+                """
+                INSERT INTO customer_events (tenant_id, customer_id, event_type, notes)
+                VALUES (%s, %s, 'p1_breach', %s)
+                """,
+                (TENANT_ID, cust["id"], f"P1 breach: {issue}")
+            )
+
+        csm = cust["assigned_csm"] or "@cs_team"
+        client.post_message(
+            f"*P1 Breach Alert* — {customer} impacted\n"
+            f"Issue: {issue}\n"
+            f"Health score reduced. {csm} please follow up."
+        )
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _parse_money(s: str) -> int:
+    s = str(s).strip().replace("Rs", "").replace("INR", "").replace(",", "").upper().replace("₹", "")
+    if s.endswith("CR"):
+        return int(float(s[:-2]) * 10000000)
+    if s.endswith("L"):
+        return int(float(s[:-1]) * 100000)
+    if s.endswith("K"):
+        return int(float(s[:-1]) * 1000)
+    try:
+        return int(float(s))
+    except Exception:
+        return 0
+
+
+def _fmt_v(v) -> str:
+    try:
+        v = int(v)
+    except Exception:
+        return str(v)
+    if v >= 10000000:
+        return f"Rs {v/10000000:.1f}Cr"
+    if v >= 100000:
+        return f"Rs {v/100000:.1f}L"
+    if v >= 1000:
+        return f"Rs {v/1000:.0f}K"
+    return f"Rs {v}"
