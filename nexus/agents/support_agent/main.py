@@ -15,6 +15,7 @@ sys.path.insert(0, "/app")
 
 from shared.switch_client import SwitchClient
 from .handlers import handle_message
+from .scheduler import start_support_scheduler
 
 
 def main():
@@ -27,6 +28,7 @@ def main():
         sys.exit(1)
 
     client = SwitchClient("SupportAgent", api_key, agent_id, room_id)
+    start_support_scheduler(client)
     client.connect(on_message_callback=handle_message, addressing_mode="anyone")
 
     logger.info("SupportAgent running.")

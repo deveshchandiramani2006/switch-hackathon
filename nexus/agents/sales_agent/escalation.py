@@ -5,6 +5,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from shared.db import db_cursor
 from shared.llm import LLMClient
 from shared.config import Config
+from shared.digest import post_morning_digest
+from shared.proactive import run_proactive_check
 
 logger = logging.getLogger(__name__)
 llm = LLMClient(agent="sales")
@@ -85,15 +87,35 @@ def check_and_escalate(client):
         logger.info(f"Commitment #{c['id']} escalated to level {new_level} -> {target}")
 
 
+TENANT_ID = "default"
+
+
 def start_escalation_scheduler(client):
     interval = int(os.getenv("ESCALATION_CHECK_MINUTES", "60"))
     scheduler = BackgroundScheduler()
+
     scheduler.add_job(
         lambda: check_and_escalate(client),
         "interval",
         minutes=interval,
         id="escalation_check"
     )
+    # Daily 9 AM digest
+    scheduler.add_job(
+        lambda: post_morning_digest(client, "SalesAgent", TENANT_ID),
+        "cron",
+        hour=9,
+        minute=0,
+        id="sales_morning_digest"
+    )
+    # Proactive checks every 6h
+    scheduler.add_job(
+        lambda: run_proactive_check(client, "SalesAgent", TENANT_ID),
+        "interval",
+        hours=6,
+        id="sales_proactive"
+    )
+
     scheduler.start()
     logger.info(f"Escalation scheduler running every {interval} min")
     return scheduler

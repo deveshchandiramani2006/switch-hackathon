@@ -5,6 +5,8 @@ import yaml
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from shared.db import db_cursor
+from shared.digest import post_morning_digest
+from shared.proactive import run_proactive_check
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +62,34 @@ def check_services(client):
             logger.warning(f"Service {svc['name']} DOWN after {fails} failures")
 
 
+TENANT_ID = "default"
+
+
 def start_monitor(client):
     scheduler = BackgroundScheduler()
+
     scheduler.add_job(
         lambda: check_services(client),
         "interval",
         minutes=5,
         id="infra_monitor"
     )
+    # Daily 9 AM digest
+    scheduler.add_job(
+        lambda: post_morning_digest(client, "InfraAgent", TENANT_ID),
+        "cron",
+        hour=9,
+        minute=0,
+        id="infra_morning_digest"
+    )
+    # Proactive checks every 6h
+    scheduler.add_job(
+        lambda: run_proactive_check(client, "InfraAgent", TENANT_ID),
+        "interval",
+        hours=6,
+        id="infra_proactive"
+    )
+
     scheduler.start()
     logger.info("Infra monitor running every 5 min")
     return scheduler
