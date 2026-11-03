@@ -1,0 +1,69 @@
+company:
+  name: "Demo Company"
+  timezone: "Asia/Kolkata"
+  locale: "en"
+
+agents:
+  sales_agent:   { enabled: true }
+  support_agent: { enabled: true }
+  geo_seo_agent: { enabled: true }
+  blog_agent:    { enabled: true }
+  infra_agent:   { enabled: true }
+
+escalation_chains:
+  sales:
+    levels:
+      - role: "sales_rep"
+        slack_user: "@rep"
+        wait_hours: 24
+      - role: "team_lead"
+        slack_user: "@lead"
+        wait_hours: 24
+      - role: "manager"
+        slack_user: "@manager"
+        wait_hours: 24
+      - role: "founder"
+        slack_user: "@founder"
+        wait_hours: 48
+    deal_size_tiers:
+      high:   { min_value: 500000, interval_hours: 12 }
+      medium: { min_value: 100000, interval_hours: 24 }
+      low:    { min_value: 0,      interval_hours: 48 }
+  support:
+    levels:
+      - role: "dev_on_duty"
+        slack_user: "@oncall_dev"
+        wait_minutes: 5
+      - role: "engineering_lead"
+        slack_user: "@eng_lead"
+        wait_minutes: 15
+      - role: "cto"
+        slack_user: "@cto"
+        wait_hours: 2
+    sla:
+      p0_hours: 2
+      p1_hours: 8
+      p2_hours: 48
+  infra:
+    levels:
+      - role: "oncall"
+        slack_user: "@oncall_infra"
+        wait_minutes: 10
+      - role: "engineering_lead"
+        slack_user: "@eng_lead"
+        wait_minutes: 20
+    health_check_interval_minutes: 5
+    failure_threshold: 2
+
+geo_seo:
+  analysis:
+    trend_threshold_pct: 200
+    rank_drop_threshold: 5
+    content_gap_min_volume: 1000
+    competitor_domains: []
+  content_queue:
+    max_briefs_per_run: 3
+  initial_keywords:
+    - "AI invoicing tools India"
+    - "payroll software startup"
+    - "HR automation SaaS"
