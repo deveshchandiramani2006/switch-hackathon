@@ -15,6 +15,7 @@ sys.path.insert(0, "/app")
 
 from shared.switch_client import SwitchClient
 from .handlers import handle_message
+from .scheduler import start_blog_scheduler
 
 
 def main():
@@ -27,6 +28,7 @@ def main():
         sys.exit(1)
 
     client = SwitchClient("BlogAgent", api_key, agent_id, room_id)
+    start_blog_scheduler(client)
     client.connect(handle_message, addressing_mode="owner_and_owner_agents")
 
     logger.info("BlogAgent running.")

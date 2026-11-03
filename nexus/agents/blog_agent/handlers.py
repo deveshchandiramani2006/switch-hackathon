@@ -1,6 +1,7 @@
 import logging
 from shared.db import db_cursor
 from shared.llm import LLMClient
+from shared.approvals import ApprovalRequest, check_approval_expirations
 from .publisher import publish_post
 
 logger = logging.getLogger(__name__)
@@ -56,13 +57,30 @@ def handle_message(client, payload: dict):
         show_queue(client)
     elif t.startswith("preview:"):
         preview_draft(client, clean.split(":", 1)[1].strip())
+    elif t.startswith("approve:"):
+        # approve: change CTA to "Book a demo" — approve with edits
+        edit_instruction = clean.split(":", 1)[1].strip()
+        approve_top_draft(client, sender, with_edits=edit_instruction)
+    elif t.startswith("delegate to"):
+        # delegate to @name
+        delegate_to = clean.replace("delegate to", "").strip().lstrip("@")
+        client.post_message(f"Draft delegated to @{delegate_to} for review.")
+    elif t.startswith("patterns"):
+        _cmd_patterns(client)
+    elif t.startswith("memory"):
+        _cmd_memory(client)
+    elif t.startswith("knowledge:"):
+        _cmd_knowledge(client, clean.split(":", 1)[1].strip())
     else:
         client.post_message(
             "Commands:\n"
             "- `@BlogAgent draft: topic`\n"
             "- `@BlogAgent queue`\n"
             "- `@BlogAgent preview: #id`\n"
-            "- Type `approve` or `reject` for top draft"
+            "- Type `approve` or `reject` for top draft\n"
+            "- `@BlogAgent approve: change CTA to X` — approve with edits\n"
+            "- `@BlogAgent delegate to @name`\n"
+            "- `@BlogAgent patterns` / `memory` / `knowledge: keyword`"
         )
 
 
@@ -133,7 +151,7 @@ def handle_brief(client, text: str):
     )
 
 
-def approve_top_draft(client, sender: str):
+def approve_top_draft(client, sender: str, with_edits: str = None):
     with db_cursor() as cur:
         cur.execute(
             """
@@ -146,6 +164,27 @@ def approve_top_draft(client, sender: str):
     if not draft:
         client.post_message("No drafts waiting for approval.")
         return
+
+    # If edits requested, apply them via LLM before publishing
+    if with_edits:
+        client.post_message(f"Applying edit: _{with_edits}_...")
+        new_body = llm.complete(
+            f"Apply this edit to the blog post:\nEdit instruction: {with_edits}\n\n"
+            f"Original post:\n{draft['draft_content']}\n\n"
+            f"Return the full updated post body only."
+        )
+        with db_cursor() as cur:
+            cur.execute(
+                "UPDATE content_queue SET draft_content=%s WHERE id=%s",
+                (new_body, draft["id"])
+            )
+        # Reload draft with updated content
+        with db_cursor() as cur:
+            cur.execute(
+                "SELECT id, keyword, title, draft_content, meta_description FROM content_queue WHERE id=%s",
+                (draft["id"],)
+            )
+            draft = cur.fetchone()
 
     # Mark as publishing to prevent double-approval
     with db_cursor() as cur:
@@ -211,6 +250,45 @@ def show_queue(client):
     lines = ["*Content queue:*\n"]
     for r in rows:
         lines.append(f"- #{r['id']} | {r['keyword']} | {r['status']}")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_patterns(client):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("BlogAgent")
+    patterns = mem.get_patterns(min_occurrences=2)
+    if not patterns:
+        client.post_message("No patterns detected yet.")
+        return
+    lines = ["*BlogAgent learned patterns:*\n"]
+    for p in patterns[:5]:
+        lines.append(f"- {p['description']} (seen {p['occurrences']}x)")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_memory(client):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("BlogAgent")
+    events = mem.search_knowledge("")
+    if not events:
+        client.post_message("No memory events recorded yet.")
+        return
+    lines = ["*BlogAgent recent memory:*\n"]
+    for ev in events[:5]:
+        lines.append(f"- [{ev['event_type']}] {str(ev['context'] or '')[:80]}")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_knowledge(client, query: str):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("BlogAgent")
+    results = mem.search_knowledge(query)
+    if not results:
+        client.post_message(f"No memory found for '{query}'.")
+        return
+    lines = [f"*Knowledge search: '{query}'*\n"]
+    for r in results[:5]:
+        lines.append(f"- [{r['event_type']}] {str(r['outcome'] or r['context'] or '')[:100]}")
     client.post_message("\n".join(lines))
 
 
