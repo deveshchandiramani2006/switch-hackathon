@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nexus
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    profiles: ["local-llm"]
+
+  sales_agent:
+    build:
+      context: .
+      dockerfile: agents/sales_agent/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      SWITCH_API_KEY: ${SWITCH_API_KEY_SALES}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_SALES}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_SALES}
+      AGENT_NAME: SalesAgent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  support_agent:
+    build:
+      context: .
+      dockerfile: agents/support_agent/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      SWITCH_API_KEY: ${SWITCH_API_KEY_SUPPORT}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_SUPPORT}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_SUPPORT}
+      AGENT_NAME: SupportAgent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  geo_seo_agent:
+    build:
+      context: .
+      dockerfile: agents/geo_seo_agent/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      SWITCH_API_KEY: ${SWITCH_API_KEY_GEOSEO}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_GEOSEO}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_GROWTH}
+      AGENT_NAME: GeoSEOAgent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  blog_agent:
+    build:
+      context: .
+      dockerfile: agents/blog_agent/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      SWITCH_API_KEY: ${SWITCH_API_KEY_BLOG}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_BLOG}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_CONTENT}
+      AGENT_NAME: BlogAgent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  infra_agent:
+    build:
+      context: .
+      dockerfile: agents/infra_agent/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      SWITCH_API_KEY: ${SWITCH_API_KEY_INFRA}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_INFRA}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_DEVOPS}
+      AGENT_NAME: InfraAgent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  ollama_data:
