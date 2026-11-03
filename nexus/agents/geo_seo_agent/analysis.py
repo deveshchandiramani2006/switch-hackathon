@@ -121,6 +121,16 @@ def run_analysis_cycle(client):
                 f"queue_id={q_id} reason={reason.replace(' ', '_')}"
             )
             client.safe_signal("BlogAgent", signal)
+
+            # Also notify SalesAgent of geo opportunity
+            geo_country = geo_cfg.get("country", "India").replace(" ", "_")
+            client.safe_signal(
+                "SalesAgent",
+                f"GEO_SIGNAL: keyword={kw.replace(' ', '_')} "
+                f"geo={geo_country} "
+                f"volume={data['volume']} trend={data.get('trend_pct', 0)}"
+            )
+
             summaries.append(f"- *{kw}* -- {reason}")
             briefs_sent += 1
 

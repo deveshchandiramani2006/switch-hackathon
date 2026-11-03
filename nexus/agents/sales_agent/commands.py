@@ -140,6 +140,17 @@ def cmd_won(client, text: str, sender: str):
         row = cur.fetchone()
     if row:
         client.post_message(f"Deal won: *{row['name']}* -- {format_value(row['deal_value'])}")
+        # Cross-agent signals: notify CSAgent and FinanceAgent
+        won_name   = row["name"].replace(" ", "_")
+        won_amount = row["deal_value"]
+        client.safe_signal(
+            "CSAgent",
+            f"DEAL_WON: customer={won_name} arr={won_amount} renewal_date="
+        )
+        client.safe_signal(
+            "FinanceAgent",
+            f"DEAL_WON: customer={won_name} amount={won_amount}"
+        )
     else:
         client.post_message(f"Lead '{name}' not found.")
 

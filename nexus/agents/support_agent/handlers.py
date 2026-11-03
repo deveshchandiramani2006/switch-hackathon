@@ -54,14 +54,60 @@ def route_command(client, text: str, sender: str):
         close_bug(client, t.split(":", 1)[1].strip(), sender)
     elif t.startswith("bugs:"):
         filter_bugs(client, t.split(":", 1)[1].strip())
+    elif t.startswith("patterns"):
+        _cmd_patterns(client)
+    elif t.startswith("memory"):
+        _cmd_memory(client)
+    elif t.startswith("knowledge:"):
+        _cmd_knowledge(client, t.split(":", 1)[1].strip())
     else:
         client.post_message(
             "Commands:\n"
             "- `@SupportAgent bug: description`\n"
             "- `@SupportAgent status`\n"
             "- `@SupportAgent close: #bug-id`\n"
-            "- `@SupportAgent bugs: open P0`"
+            "- `@SupportAgent bugs: open P0`\n"
+            "- `@SupportAgent patterns` / `memory` / `knowledge: keyword`"
         )
+
+
+def _cmd_patterns(client):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("SupportAgent")
+    patterns = mem.get_patterns(min_occurrences=2)
+    if not patterns:
+        client.post_message("No patterns detected yet.")
+        return
+    lines = ["*SupportAgent learned patterns:*\n"]
+    for p in patterns[:5]:
+        lines.append(f"- {p['description']} (seen {p['occurrences']}x)")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_memory(client):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("SupportAgent")
+    events = mem.search_knowledge("")
+    if not events:
+        client.post_message("No memory events recorded yet.")
+        return
+    lines = ["*SupportAgent recent memory:*\n"]
+    for ev in events[:5]:
+        lines.append(f"- [{ev['event_type']}] {str(ev['context'] or '')[:80]}")
+    client.post_message("\n".join(lines))
+
+
+def _cmd_knowledge(client, query: str):
+    from shared.memory import AgentMemory
+    mem = AgentMemory("SupportAgent")
+    results = mem.search_knowledge(query)
+    if not results:
+        client.post_message(f"No memory found for '{query}'.")
+        return
+    lines = [f"*Knowledge search: '{query}'*\n"]
+    for r in results[:5]:
+        lines.append(f"- [{r['event_type']}] {str(r['outcome'] or r['context'] or '')[:100]}")
+    client.post_message("\n".join(lines))
 
 
 def triage_bug(client, description: str, sender: str):
@@ -86,6 +132,14 @@ def triage_bug(client, description: str, sender: str):
         f"{data.get('summary', description)}\n"
         f"Reported by: @{sender}"
     )
+
+    # Fire P1_BREACH signal to CSAgent for P0/P1 bugs
+    if sev in ("P0", "P1"):
+        issue_text = data.get("summary", description[:60]).replace(" ", "_")
+        client.safe_signal(
+            "CSAgent",
+            f"P1_BREACH: customer=Unknown issue={issue_text}"
+        )
 
 
 def passive_triage(client, text: str, sender: str):
