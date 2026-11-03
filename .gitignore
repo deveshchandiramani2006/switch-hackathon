@@ -1,2 +1,4 @@
 docs/
 imp/
+# Allow nexus/docs (product documentation)
+!nexus/docs/
