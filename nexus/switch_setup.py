@@ -44,6 +44,20 @@ AGENTS = [
         "key_env":  "SWITCH_API_KEY_INFRA",
         "addressing": "anyone",
     },
+    {
+        "name": "CSAgent",
+        "description": "Customer success, health scoring, renewal tracking, churn prevention",
+        "id_env":   "SWITCH_AGENT_ID_CS",
+        "key_env":  "SWITCH_API_KEY_CS",
+        "addressing": "owner_and_owner_agents",
+    },
+    {
+        "name": "FinanceAgent",
+        "description": "Invoice approvals, budget tracking, expense management, forecasting",
+        "id_env":   "SWITCH_AGENT_ID_FINANCE",
+        "key_env":  "SWITCH_API_KEY_FINANCE",
+        "addressing": "owner_and_owner_agents",
+    },
 ]
 
 

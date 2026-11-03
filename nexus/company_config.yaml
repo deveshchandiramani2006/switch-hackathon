@@ -2,6 +2,11 @@ company:
   name: "Demo Company"
   timezone: "Asia/Kolkata"
   locale: "en"
+  industry: "SaaS"
+
+tenant:
+  id: "default"
+  plan: "enterprise"
 
 agents:
   sales_agent:   { enabled: true }
@@ -9,6 +14,39 @@ agents:
   geo_seo_agent: { enabled: true }
   blog_agent:    { enabled: true }
   infra_agent:   { enabled: true }
+  cs_agent:      { enabled: true }
+  finance_agent: { enabled: true }
+
+llm:
+  agents:
+    default:
+      provider: anthropic
+      model: claude-sonnet-4-6
+    sales_agent:
+      provider: anthropic
+      model: claude-sonnet-4-6
+    support_agent:
+      provider: anthropic
+      model: claude-sonnet-4-6
+    geo_seo_agent:
+      provider: anthropic
+      model: claude-sonnet-4-6
+    blog_agent:
+      provider: ollama
+      model: mistral
+    infra_agent:
+      provider: ollama
+      model: phi3
+    cs_agent:
+      provider: anthropic
+      model: claude-sonnet-4-6
+    finance_agent:
+      provider: anthropic
+      model: claude-sonnet-4-6
+  formatter:
+    fallback:
+      provider: groq
+      model: llama-3.3-70b-versatile
 
 escalation_chains:
   sales:
@@ -54,6 +92,13 @@ escalation_chains:
         wait_minutes: 20
     health_check_interval_minutes: 5
     failure_threshold: 2
+  cs:
+    csm: "@cs_team"
+    cs_lead: "@cs_lead"
+    alert_hours: 48
+  finance:
+    approver: "@finance_lead"
+    timeout_hours: 48
 
 geo_seo:
   analysis:
@@ -63,7 +108,37 @@ geo_seo:
     competitor_domains: []
   content_queue:
     max_briefs_per_run: 3
+  country: "India"
   initial_keywords:
     - "AI invoicing tools India"
     - "payroll software startup"
     - "HR automation SaaS"
+
+cs:
+  health_score:
+    nps_weight: 30
+    support_weight: 25
+    renewal_weight: 20
+    engagement_weight: 25
+  thresholds:
+    green: 70
+    yellow: 50
+  renewal_alert_days: 30
+  expansion_health_min: 80
+
+finance:
+  approval_required_above: 50000
+  budget_alert_pct: 75
+  invoice_reminder_days: 3
+
+blog:
+  approval:
+    required_approvers: []
+    timeout_hours: 48
+  content_refresh_days: 90
+
+integrations:
+  crm: null
+  billing: null
+  helpdesk: null
+  analytics: null

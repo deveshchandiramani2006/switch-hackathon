@@ -107,6 +107,74 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  cs_agent:
+    build:
+      context: .
+      dockerfile: agents/cs_agent/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      SWITCH_API_KEY: ${SWITCH_API_KEY_CS}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_CS}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_CS}
+      AGENT_NAME: CSAgent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  finance_agent:
+    build:
+      context: .
+      dockerfile: agents/finance_agent/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      SWITCH_API_KEY: ${SWITCH_API_KEY_FINANCE}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_FINANCE}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_FINANCE}
+      AGENT_NAME: FinanceAgent
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  voice_server:
+    build:
+      context: .
+      dockerfile: Dockerfile.voice
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      VOICE_SERVER_PORT: ${VOICE_SERVER_PORT:-5001}
+    ports:
+      - "${VOICE_SERVER_PORT:-5001}:5001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  management_api:
+    build:
+      context: .
+      dockerfile: Dockerfile.mgmt
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
+      NEXUS_MASTER_KEY: ${NEXUS_MASTER_KEY}
+      MANAGEMENT_API_PORT: ${MANAGEMENT_API_PORT:-5000}
+      NEXUS_CONFIG_DIR: /app/tenant_configs
+    ports:
+      - "${MANAGEMENT_API_PORT:-5000}:5000"
+    volumes:
+      - tenant_configs:/app/tenant_configs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   ollama_data:
+  tenant_configs:
