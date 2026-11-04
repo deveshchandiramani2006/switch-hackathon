@@ -27,7 +27,8 @@ def main():
         logger.error("SWITCH_AGENT_ID, SWITCH_API_KEY, SWITCH_ROOM_ID must be set.")
         sys.exit(1)
 
-    client = SwitchClient("SupportAgent", api_key, agent_id, room_id)
+    tenant_id = os.getenv("TENANT_ID", "default")
+    client = SwitchClient("SupportAgent", api_key, agent_id, room_id, tenant_id=tenant_id)
     start_support_scheduler(client)
     client.connect(on_message_callback=handle_message, addressing_mode="anyone")
 

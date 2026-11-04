@@ -13,13 +13,13 @@ from .health import calculate_health
 logger = logging.getLogger(__name__)
 llm = LLMClient(agent="cs")
 
-TENANT_ID = "default"
-
 
 def handle_message(client, payload: dict):
     text       = payload.get("text", "").strip()
     sender     = payload.get("sender", "")
     is_mention = payload.get("is_mention", False)
+    room_id    = payload.get("room_id", client.room_id)
+    tenant_id  = client.tenant_id
 
     if not text or sender in ("CSAgent", "NEXUS"):
         return
@@ -41,18 +41,25 @@ def handle_message(client, payload: dict):
             clean = clean[len(p):]
             break
 
-    _route_command(client, clean, sender)
+    from app.Services import ConversationService
+    if ConversationService.resume(tenant_id, room_id, sender, "CSAgent", clean, client):
+        return
+
+    _route_command(client, clean, sender, tenant_id, room_id)
 
 
-def _route_command(client, text: str, sender: str):
+def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     t = text.lower().strip()
 
-    if t.startswith("add customer:"):
-        _cmd_add_customer(client, text, sender)
+    if t == "add customer":
+        from app.Services import ConversationService
+        ConversationService.start(tenant_id, room_id, sender, "CSAgent", "add_customer", client)
+    elif t.startswith("add customer:"):
+        _cmd_add_customer(client, text, sender, tenant_id)
     elif t.startswith("health:"):
-        _cmd_health(client, text.split(":", 1)[1].strip())
+        _cmd_health(client, text.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("at-risk") or t.startswith("at risk"):
-        _cmd_at_risk(client)
+        _cmd_at_risk(client, tenant_id)
     elif t.startswith("renewals"):
         days = 30
         if ":" in t:
@@ -60,21 +67,24 @@ def _route_command(client, text: str, sender: str):
                 days = int(t.split(":", 1)[1].strip())
             except ValueError:
                 pass
-        _cmd_renewals(client, days)
+        _cmd_renewals(client, days, tenant_id)
+    elif t == "nps":
+        from app.Services import ConversationService
+        ConversationService.start(tenant_id, room_id, sender, "CSAgent", "log_nps", client)
     elif t.startswith("nps:"):
-        _cmd_log_nps(client, text, sender)
+        _cmd_log_nps(client, text, sender, tenant_id)
     elif t.startswith("expansion:"):
-        _cmd_expansion(client, text.split(":", 1)[1].strip())
+        _cmd_expansion(client, text.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("qbr:"):
-        _cmd_qbr(client, text.split(":", 1)[1].strip())
+        _cmd_qbr(client, text.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("weekly report"):
-        _cmd_weekly_report(client)
+        _cmd_weekly_report(client, tenant_id)
     elif t.startswith("patterns"):
-        _cmd_patterns(client)
+        _cmd_patterns(client, tenant_id)
     elif t.startswith("memory"):
-        _cmd_memory(client)
+        _cmd_memory(client, tenant_id)
     elif t.startswith("knowledge:"):
-        _cmd_knowledge(client, text.split(":", 1)[1].strip())
+        _cmd_knowledge(client, text.split(":", 1)[1].strip(), tenant_id)
     else:
         client.post_message(
             "CSAgent commands:\n"
@@ -91,7 +101,7 @@ def _route_command(client, text: str, sender: str):
 
 # ── Commands ───────────────────────────────────────────────────────────────────
 
-def _cmd_add_customer(client, text: str, sender: str):
+def _cmd_add_customer(client, text: str, sender: str, tenant_id: str):
     """Parse: 'add customer: Name, Rs500000, renewal: 2027-03-31'"""
     raw = text.split(":", 1)[1].strip()
     # Extract renewal date if present
@@ -115,7 +125,7 @@ def _cmd_add_customer(client, text: str, sender: str):
             INSERT INTO customers (tenant_id, name, arr, renewal_date, assigned_csm)
             VALUES (%s, %s, %s, %s, %s) RETURNING id
             """,
-            (TENANT_ID, name, arr, renewal_date, f"@{sender}")
+            (tenant_id, name, arr, renewal_date, f"@{sender}")
         )
         cid = cur.fetchone()["id"]
 
@@ -126,12 +136,12 @@ def _cmd_add_customer(client, text: str, sender: str):
     )
 
 
-def _cmd_health(client, name: str):
+def _cmd_health(client, name: str, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             "SELECT id, name, arr, renewal_date, nps, assigned_csm, health_score "
             "FROM customers WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
-            (TENANT_ID, f"%{name}%")
+            (tenant_id, f"%{name}%")
         )
         cust = cur.fetchone()
 
@@ -139,7 +149,7 @@ def _cmd_health(client, name: str):
         client.post_message(f"Customer '{name}' not found.")
         return
 
-    health = calculate_health(cust["id"], TENANT_ID)
+    health = calculate_health(cust["id"], tenant_id)
     icon = {"GREEN": "[GREEN]", "YELLOW": "[YELLOW]", "RED": "[RED]"}.get(health["level"], "")
     renewal_str = str(cust["renewal_date"]) if cust["renewal_date"] else "not set"
 
@@ -154,7 +164,7 @@ def _cmd_health(client, name: str):
     client.post_message("\n".join(lines))
 
 
-def _cmd_at_risk(client):
+def _cmd_at_risk(client, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             """
@@ -163,7 +173,7 @@ def _cmd_at_risk(client):
             WHERE tenant_id=%s AND health_score < 70 AND status='active'
             ORDER BY health_score ASC
             """,
-            (TENANT_ID,)
+            (tenant_id,)
         )
         rows = cur.fetchall()
 
@@ -181,7 +191,7 @@ def _cmd_at_risk(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_renewals(client, days: int):
+def _cmd_renewals(client, days: int, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             """
@@ -191,7 +201,7 @@ def _cmd_renewals(client, days: int):
               AND renewal_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '%s days'
             ORDER BY renewal_date ASC
             """,
-            (TENANT_ID, days)
+            (tenant_id, days)
         )
         rows = cur.fetchall()
 
@@ -210,7 +220,7 @@ def _cmd_renewals(client, days: int):
     client.post_message("\n".join(lines))
 
 
-def _cmd_log_nps(client, text: str, sender: str):
+def _cmd_log_nps(client, text: str, sender: str, tenant_id: str):
     """Parse: 'nps: CustomerName, score: 7, note: feedback text'"""
     raw   = text.split(":", 1)[1].strip() if ":" in text else text
     parts = raw.split(",")
@@ -234,7 +244,7 @@ def _cmd_log_nps(client, text: str, sender: str):
     with db_cursor() as cur:
         cur.execute(
             "UPDATE customers SET nps=%s WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) RETURNING id, name",
-            (score, TENANT_ID, f"%{name}%")
+            (score, tenant_id, f"%{name}%")
         )
         row = cur.fetchone()
 
@@ -248,19 +258,19 @@ def _cmd_log_nps(client, text: str, sender: str):
             INSERT INTO customer_events (tenant_id, customer_id, event_type, notes)
             VALUES (%s, %s, 'nps_logged', %s)
             """,
-            (TENANT_ID, row["id"], f"NPS {score}: {note}")
+            (tenant_id, row["id"], f"NPS {score}: {note}")
         )
 
     label = "promoter" if score >= 9 else ("passive" if score >= 7 else "detractor")
     client.post_message(f"NPS logged for *{row['name']}*: {score}/10 ({label})\n_{note}_")
 
 
-def _cmd_expansion(client, name: str):
+def _cmd_expansion(client, name: str, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             "SELECT id, name, arr, health_score, nps FROM customers "
             "WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
-            (TENANT_ID, f"%{name}%")
+            (tenant_id, f"%{name}%")
         )
         cust = cur.fetchone()
 
@@ -272,7 +282,7 @@ def _cmd_expansion(client, name: str):
         cur.execute(
             "SELECT event_type, notes, created_at FROM customer_events "
             "WHERE tenant_id=%s AND customer_id=%s ORDER BY created_at DESC LIMIT 10",
-            (TENANT_ID, cust["id"])
+            (tenant_id, cust["id"])
         )
         events = cur.fetchall()
 
@@ -300,11 +310,11 @@ def _cmd_expansion(client, name: str):
     )
 
 
-def _cmd_qbr(client, name: str):
+def _cmd_qbr(client, name: str, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             "SELECT * FROM customers WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
-            (TENANT_ID, f"%{name}%")
+            (tenant_id, f"%{name}%")
         )
         cust = cur.fetchone()
 
@@ -312,7 +322,7 @@ def _cmd_qbr(client, name: str):
         client.post_message(f"Customer '{name}' not found.")
         return
 
-    health = calculate_health(cust["id"], TENANT_ID)
+    health = calculate_health(cust["id"], tenant_id)
     prompt = (
         f"Generate a QBR (Quarterly Business Review) agenda for customer: {cust['name']}\n"
         f"ARR: {_fmt_v(cust['arr'])}\n"
@@ -327,22 +337,22 @@ def _cmd_qbr(client, name: str):
     client.post_message(f"*QBR Agenda for {cust['name']}:*\n\n{agenda}")
 
 
-def _cmd_weekly_report(client):
+def _cmd_weekly_report(client, tenant_id: str):
     with db_cursor() as cur:
-        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND status='active'", (TENANT_ID,))
+        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND status='active'", (tenant_id,))
         total = cur.fetchone()["cnt"]
-        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND health_score < 50", (TENANT_ID,))
+        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND health_score < 50", (tenant_id,))
         red = cur.fetchone()["cnt"]
-        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND health_score BETWEEN 50 AND 69", (TENANT_ID,))
+        cur.execute("SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND health_score BETWEEN 50 AND 69", (tenant_id,))
         yellow = cur.fetchone()["cnt"]
         cur.execute(
             "SELECT COUNT(*) AS cnt FROM customers WHERE tenant_id=%s AND renewal_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'",
-            (TENANT_ID,)
+            (tenant_id,)
         )
         renewals = cur.fetchone()["cnt"]
         cur.execute(
             "SELECT name, arr FROM customers WHERE tenant_id=%s AND health_score < 50 ORDER BY arr DESC LIMIT 3",
-            (TENANT_ID,)
+            (tenant_id,)
         )
         top_red = cur.fetchall()
 
@@ -359,9 +369,9 @@ def _cmd_weekly_report(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_patterns(client):
+def _cmd_patterns(client, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
-    mem = AgentMemory("CSAgent", TENANT_ID)
+    mem = AgentMemory("CSAgent", tenant_id)
     patterns = mem.get_patterns(min_occurrences=2)
     if not patterns:
         client.post_message("No patterns detected yet. Keep using CSAgent and patterns will emerge.")
@@ -372,9 +382,9 @@ def _cmd_patterns(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_memory(client):
+def _cmd_memory(client, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
-    mem = AgentMemory("CSAgent", TENANT_ID)
+    mem = AgentMemory("CSAgent", tenant_id)
     events = mem.search_knowledge("")
     if not events:
         client.post_message("No memory events recorded yet.")
@@ -385,9 +395,9 @@ def _cmd_memory(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_knowledge(client, query: str):
+def _cmd_knowledge(client, query: str, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
-    mem = AgentMemory("CSAgent", TENANT_ID)
+    mem = AgentMemory("CSAgent", tenant_id)
     results = mem.search_knowledge(query)
     if not results:
         client.post_message(f"No memory found for '{query}'.")
@@ -402,6 +412,7 @@ def _cmd_knowledge(client, query: str):
 
 def _handle_deal_won(client, text: str):
     """DEAL_WON: customer=X arr=Y renewal_date=Z"""
+    tenant_id = client.tenant_id
     parts = {}
     for p in text.replace("DEAL_WON:", "").strip().split():
         if "=" in p:
@@ -429,7 +440,7 @@ def _handle_deal_won(client, text: str):
             VALUES (%s, %s, %s, %s, 'active')
             ON CONFLICT DO NOTHING RETURNING id
             """,
-            (TENANT_ID, name, arr, renewal_date)
+            (tenant_id, name, arr, renewal_date)
         )
         row = cur.fetchone()
 
@@ -443,6 +454,7 @@ def _handle_deal_won(client, text: str):
 
 def _handle_p1_breach(client, text: str):
     """P1_BREACH: customer=X issue=Y"""
+    tenant_id = client.tenant_id
     parts = {}
     for p in text.replace("P1_BREACH:", "").strip().split():
         if "=" in p:
@@ -458,7 +470,7 @@ def _handle_p1_breach(client, text: str):
     with db_cursor() as cur:
         cur.execute(
             "SELECT id, assigned_csm FROM customers WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
-            (TENANT_ID, f"%{customer}%")
+            (tenant_id, f"%{customer}%")
         )
         cust = cur.fetchone()
 
@@ -474,7 +486,7 @@ def _handle_p1_breach(client, text: str):
                 INSERT INTO customer_events (tenant_id, customer_id, event_type, notes)
                 VALUES (%s, %s, 'p1_breach', %s)
                 """,
-                (TENANT_ID, cust["id"], f"P1 breach: {issue}")
+                (tenant_id, cust["id"], f"P1 breach: {issue}")
             )
 
         csm = cust["assigned_csm"] or "@cs_team"
@@ -483,6 +495,51 @@ def _handle_p1_breach(client, text: str):
             f"Issue: {issue}\n"
             f"Health score reduced. {csm} please follow up."
         )
+
+
+# ── Modal data-variant functions ──────────────────────────────────────────────
+
+def cmd_add_customer_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ConversationService after wizard completes."""
+    from app.Services.ValidationService import validate_money, validate_date
+    arr, _ = validate_money(data["arr"])
+    renewal_date = None
+    if data.get("renewal_date"):
+        renewal_date, _ = validate_date(data["renewal_date"])
+
+    with db_cursor() as cur:
+        cur.execute(
+            "INSERT INTO customers (tenant_id, name, arr, renewal_date, assigned_csm) VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (tenant_id, data["name"], arr, renewal_date, f"@{sender}")
+        )
+        cid = cur.fetchone()["id"]
+    client.post_message(
+        f"Customer added (#{cid})\n*{data['name']}* | ARR: {_fmt_v(arr)} | Renewal: {renewal_date or 'not set'} | CSM: @{sender}"
+    )
+
+
+def cmd_log_nps_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ConversationService after wizard completes."""
+    from app.Services.ValidationService import validate_integer
+    score, _ = validate_integer(str(data["score"]), 0, 10)
+    note = data.get("note") or ""
+
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE customers SET nps=%s WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) RETURNING id, name",
+            (score, tenant_id, f"%{data['customer']}%")
+        )
+        row = cur.fetchone()
+    if not row:
+        client.post_message(f"Customer '{data['customer']}' not found.")
+        return
+    with db_cursor() as cur:
+        cur.execute(
+            "INSERT INTO customer_events (tenant_id, customer_id, event_type, notes) VALUES (%s,%s,'nps_logged',%s)",
+            (tenant_id, row["id"], f"NPS {score}: {note}")
+        )
+    label = "promoter" if score >= 9 else ("passive" if score >= 7 else "detractor")
+    client.post_message(f"NPS logged for *{row['name']}*: {score}/10 ({label})\n_{note}_")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

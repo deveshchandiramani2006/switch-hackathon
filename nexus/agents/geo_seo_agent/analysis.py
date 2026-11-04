@@ -57,7 +57,7 @@ def _mock_data(keyword: str) -> dict:
     }
 
 
-def run_analysis_cycle(client):
+def run_analysis_cycle(client, tenant_id: str = "default"):
     try:
         with open("company_config.yaml") as f:
             cfg = yaml.safe_load(f)
@@ -70,7 +70,7 @@ def run_analysis_cycle(client):
     init_keywords  = geo_cfg.get("initial_keywords", [])
 
     with db_cursor() as cur:
-        cur.execute("SELECT keyword FROM keyword_tracking")
+        cur.execute("SELECT keyword FROM keyword_tracking WHERE tenant_id=%s", (tenant_id,))
         tracked = [r["keyword"] for r in cur.fetchall()]
 
     all_keywords = list(set(tracked + init_keywords))
@@ -84,15 +84,15 @@ def run_analysis_cycle(client):
         with db_cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO keyword_tracking (keyword, volume, current_rank)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (keyword) DO UPDATE
+                INSERT INTO keyword_tracking (tenant_id, keyword, volume, current_rank)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (tenant_id, keyword) DO UPDATE
                   SET previous_rank    = keyword_tracking.current_rank,
                       current_rank     = EXCLUDED.current_rank,
                       volume           = EXCLUDED.volume,
                       last_checked_at  = NOW()
                 """,
-                (kw, data["volume"], data["rank"])
+                (tenant_id, kw, data["volume"], data["rank"])
             )
 
         should_brief = False
@@ -108,10 +108,10 @@ def run_analysis_cycle(client):
             with db_cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO content_queue (keyword, volume, trend_pct, brief_notes, source)
-                    VALUES (%s, %s, %s, %s, 'geo_seo') RETURNING id
+                    INSERT INTO content_queue (tenant_id, keyword, volume, trend_pct, brief_notes, source)
+                    VALUES (%s, %s, %s, %s, %s, 'geo_seo') RETURNING id
                     """,
-                    (kw, data["volume"], data.get("trend_pct", 0), reason)
+                    (tenant_id, kw, data["volume"], data.get("trend_pct", 0), reason)
                 )
                 q_id = cur.fetchone()["id"]
 

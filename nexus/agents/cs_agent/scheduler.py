@@ -9,15 +9,13 @@ from app.Services.ProactiveService import run_proactive_check
 
 logger = logging.getLogger(__name__)
 
-TENANT_ID = "default"
-
 
 def start_cs_scheduler(client):
     scheduler = BackgroundScheduler()
 
     # Daily 9 AM health digest
     scheduler.add_job(
-        lambda: post_morning_digest(client, "CSAgent", TENANT_ID),
+        lambda: post_morning_digest(client, "CSAgent", client.tenant_id),
         "cron",
         hour=9,
         minute=0,
@@ -36,7 +34,7 @@ def start_cs_scheduler(client):
 
     # Daily at-risk sweep (run health escalations every 6h)
     scheduler.add_job(
-        lambda: run_health_escalations(client, TENANT_ID),
+        lambda: run_health_escalations(client, client.tenant_id),
         "interval",
         hours=6,
         id="cs_health_escalations"
@@ -44,7 +42,7 @@ def start_cs_scheduler(client):
 
     # Proactive intelligence every 6h
     scheduler.add_job(
-        lambda: run_proactive_check(client, "CSAgent", TENANT_ID),
+        lambda: run_proactive_check(client, "CSAgent", client.tenant_id),
         "interval",
         hours=6,
         id="cs_proactive"
@@ -57,4 +55,4 @@ def start_cs_scheduler(client):
 
 def _weekly_report(client):
     from agents.cs_agent.handlers import _cmd_weekly_report
-    _cmd_weekly_report(client)
+    _cmd_weekly_report(client, client.tenant_id)

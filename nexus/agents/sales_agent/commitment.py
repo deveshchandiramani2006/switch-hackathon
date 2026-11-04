@@ -41,7 +41,7 @@ NOT commitments:
 '''
 
 
-def detect_commitment(client, message: str, user: str):
+def detect_commitment(client, message: str, user: str, tenant_id: str):
     if len(message.strip()) < 8:
         return
     try:
@@ -58,11 +58,12 @@ def detect_commitment(client, message: str, user: str):
         cur.execute(
             """
             INSERT INTO commitments
-              (lead_name, commitment_text, party, deadline, detected_by, source_message)
-            VALUES (%s, %s, %s, %s::date, 'passive', %s)
+              (tenant_id, lead_name, commitment_text, party, deadline, detected_by, source_message)
+            VALUES (%s, %s, %s, %s, %s::date, 'passive', %s)
             RETURNING id
             """,
             (
+                tenant_id,
                 data.get("lead_name"),
                 data["commitment_text"],
                 data["party"],

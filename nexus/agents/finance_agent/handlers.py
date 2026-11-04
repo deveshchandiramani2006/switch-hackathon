@@ -10,13 +10,13 @@ from app.Services.LlmService import LLMClient
 logger = logging.getLogger(__name__)
 llm = LLMClient(agent="finance")
 
-TENANT_ID = "default"
-
 
 def handle_message(client, payload: dict):
     text       = payload.get("text", "").strip()
     sender     = payload.get("sender", "")
     is_mention = payload.get("is_mention", False)
+    room_id    = payload.get("room_id", client.room_id)
+    tenant_id  = client.tenant_id
 
     if not text or sender in ("FinanceAgent", "NEXUS"):
         return
@@ -35,38 +35,51 @@ def handle_message(client, payload: dict):
             clean = clean[len(p):]
             break
 
-    _route_command(client, clean, sender)
+    from app.Services import ConversationService
+    if ConversationService.resume(tenant_id, room_id, sender, "FinanceAgent", clean, client):
+        return
+
+    _route_command(client, clean, sender, tenant_id, room_id)
 
 
-def _route_command(client, text: str, sender: str):
+def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     t = text.lower().strip()
 
-    if t.startswith("invoice:"):
-        _cmd_invoice(client, text, sender)
+    if t == "invoice" or t == "invoice:":
+        from app.Services import ConversationService
+        ConversationService.start(tenant_id, room_id, sender, "FinanceAgent", "add_invoice", client)
+    elif t.startswith("invoice:"):
+        _cmd_invoice(client, text, sender, tenant_id)
     elif t.startswith("invoices"):
-        _cmd_list_invoices(client)
+        _cmd_list_invoices(client, tenant_id)
     elif t.startswith("approve:"):
-        _cmd_approve_invoice(client, text, sender)
+        _cmd_approve_invoice(client, text, sender, tenant_id)
+    elif t == "reject":
+        from app.Services import ConversationService
+        ConversationService.start(tenant_id, room_id, sender, "FinanceAgent", "reject_invoice", client)
     elif t.startswith("reject:"):
-        _cmd_reject_invoice(client, text, sender)
+        _cmd_reject_invoice(client, text, sender, tenant_id)
     elif t.startswith("budget:"):
-        _cmd_budget_status(client, text.split(":", 1)[1].strip())
+        _cmd_budget_status(client, text.split(":", 1)[1].strip(), tenant_id)
+    elif t == "expense":
+        from app.Services import ConversationService
+        ConversationService.start(tenant_id, room_id, sender, "FinanceAgent", "add_expense", client)
     elif t.startswith("expense:"):
-        _cmd_expense(client, text, sender)
+        _cmd_expense(client, text, sender, tenant_id)
     elif t.startswith("expenses pending"):
-        _cmd_expenses_pending(client)
+        _cmd_expenses_pending(client, tenant_id)
     elif t.startswith("overdue"):
-        _cmd_overdue(client)
+        _cmd_overdue(client, tenant_id)
     elif t.startswith("weekly report"):
-        _cmd_weekly_report(client)
+        _cmd_weekly_report(client, tenant_id)
     elif t.startswith("forecast"):
-        _cmd_forecast(client)
+        _cmd_forecast(client, tenant_id)
     elif t.startswith("patterns"):
-        _cmd_patterns(client)
+        _cmd_patterns(client, tenant_id)
     elif t.startswith("memory"):
-        _cmd_memory(client)
+        _cmd_memory(client, tenant_id)
     elif t.startswith("knowledge:"):
-        _cmd_knowledge(client, text.split(":", 1)[1].strip())
+        _cmd_knowledge(client, text.split(":", 1)[1].strip(), tenant_id)
     else:
         client.post_message(
             "FinanceAgent commands:\n"
@@ -85,7 +98,7 @@ def _route_command(client, text: str, sender: str):
 
 # ── Commands ───────────────────────────────────────────────────────────────────
 
-def _cmd_invoice(client, text: str, sender: str):
+def _cmd_invoice(client, text: str, sender: str, tenant_id: str):
     """Parse: 'invoice: Vendor, Rs50000, due: 2026-11-15, category: software'"""
     raw = text.split(":", 1)[1].strip()
     due_date = None
@@ -115,7 +128,7 @@ def _cmd_invoice(client, text: str, sender: str):
             INSERT INTO invoices (tenant_id, vendor, amount, due_date, category, submitted_by)
             VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
             """,
-            (TENANT_ID, vendor, amount, due_date, category, f"@{sender}")
+            (tenant_id, vendor, amount, due_date, category, f"@{sender}")
         )
         inv_id = cur.fetchone()["id"]
 
@@ -126,7 +139,7 @@ def _cmd_invoice(client, text: str, sender: str):
     )
 
 
-def _cmd_list_invoices(client):
+def _cmd_list_invoices(client, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             """
@@ -137,7 +150,7 @@ def _cmd_list_invoices(client):
                 due_date ASC NULLS LAST
             LIMIT 20
             """,
-            (TENANT_ID,)
+            (tenant_id,)
         )
         rows = cur.fetchall()
 
@@ -155,7 +168,7 @@ def _cmd_list_invoices(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_approve_invoice(client, text: str, sender: str):
+def _cmd_approve_invoice(client, text: str, sender: str, tenant_id: str):
     ref    = text.split(":", 1)[1].strip()
     inv_id = ref.replace("invoice-", "").strip()
     with db_cursor() as cur:
@@ -165,7 +178,7 @@ def _cmd_approve_invoice(client, text: str, sender: str):
             WHERE id=%s AND tenant_id=%s
             RETURNING id, vendor, amount
             """,
-            (f"@{sender}", inv_id, TENANT_ID)
+            (f"@{sender}", inv_id, tenant_id)
         )
         row = cur.fetchone()
 
@@ -178,7 +191,7 @@ def _cmd_approve_invoice(client, text: str, sender: str):
         client.post_message(f"Invoice '{ref}' not found.")
 
 
-def _cmd_reject_invoice(client, text: str, sender: str):
+def _cmd_reject_invoice(client, text: str, sender: str, tenant_id: str):
     raw    = text.split(":", 1)[1].strip()
     parts  = raw.split(",", 1)
     ref    = parts[0].strip()
@@ -188,7 +201,7 @@ def _cmd_reject_invoice(client, text: str, sender: str):
     with db_cursor() as cur:
         cur.execute(
             "UPDATE invoices SET status='rejected', notes=%s WHERE id=%s AND tenant_id=%s RETURNING id, vendor",
-            (f"Rejected by @{sender}: {reason}", inv_id, TENANT_ID)
+            (f"Rejected by @{sender}: {reason}", inv_id, tenant_id)
         )
         row = cur.fetchone()
 
@@ -198,11 +211,11 @@ def _cmd_reject_invoice(client, text: str, sender: str):
         client.post_message(f"Invoice '{ref}' not found.")
 
 
-def _cmd_budget_status(client, name: str):
+def _cmd_budget_status(client, name: str, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             "SELECT * FROM budgets WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
-            (TENANT_ID, f"%{name}%")
+            (tenant_id, f"%{name}%")
         )
         budget = cur.fetchone()
 
@@ -221,7 +234,7 @@ def _cmd_budget_status(client, name: str):
     )
 
 
-def _cmd_expense(client, text: str, sender: str):
+def _cmd_expense(client, text: str, sender: str, tenant_id: str):
     """Parse: 'expense: Name, Rs3200, travel, 2026-11-04'"""
     raw   = text.split(":", 1)[1].strip()
     parts = [p.strip() for p in raw.split(",")]
@@ -241,7 +254,7 @@ def _cmd_expense(client, text: str, sender: str):
             INSERT INTO expenses (tenant_id, submitter, amount, category, expense_date, status)
             VALUES (%s, %s, %s, %s, %s, 'pending') RETURNING id
             """,
-            (TENANT_ID, submitter, amount, category, expense_date or date.today())
+            (tenant_id, submitter, amount, category, expense_date or date.today())
         )
         exp_id = cur.fetchone()["id"]
 
@@ -252,12 +265,12 @@ def _cmd_expense(client, text: str, sender: str):
     )
 
 
-def _cmd_expenses_pending(client):
+def _cmd_expenses_pending(client, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             "SELECT id, submitter, amount, category, expense_date FROM expenses "
             "WHERE tenant_id=%s AND status='pending' ORDER BY created_at ASC",
-            (TENANT_ID,)
+            (tenant_id,)
         )
         rows = cur.fetchall()
 
@@ -272,13 +285,13 @@ def _cmd_expenses_pending(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_overdue(client):
+def _cmd_overdue(client, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             "SELECT id, vendor, amount, due_date FROM invoices "
             "WHERE tenant_id=%s AND status='pending' AND due_date < CURRENT_DATE "
             "ORDER BY due_date ASC",
-            (TENANT_ID,)
+            (tenant_id,)
         )
         rows = cur.fetchall()
 
@@ -293,15 +306,15 @@ def _cmd_overdue(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_weekly_report(client):
+def _cmd_weekly_report(client, tenant_id: str):
     with db_cursor() as cur:
-        cur.execute("SELECT COUNT(*) AS cnt, SUM(amount) AS total FROM invoices WHERE tenant_id=%s AND status='pending'", (TENANT_ID,))
+        cur.execute("SELECT COUNT(*) AS cnt, SUM(amount) AS total FROM invoices WHERE tenant_id=%s AND status='pending'", (tenant_id,))
         inv_row = cur.fetchone()
-        cur.execute("SELECT COUNT(*) AS cnt FROM invoices WHERE tenant_id=%s AND status='pending' AND due_date < CURRENT_DATE", (TENANT_ID,))
+        cur.execute("SELECT COUNT(*) AS cnt FROM invoices WHERE tenant_id=%s AND status='pending' AND due_date < CURRENT_DATE", (tenant_id,))
         overdue_cnt = cur.fetchone()["cnt"]
-        cur.execute("SELECT COUNT(*) AS cnt, SUM(amount) AS total FROM expenses WHERE tenant_id=%s AND status='pending'", (TENANT_ID,))
+        cur.execute("SELECT COUNT(*) AS cnt, SUM(amount) AS total FROM expenses WHERE tenant_id=%s AND status='pending'", (tenant_id,))
         exp_row = cur.fetchone()
-        cur.execute("SELECT SUM(allocated) AS alloc, SUM(spent) AS sp FROM budgets WHERE tenant_id=%s", (TENANT_ID,))
+        cur.execute("SELECT SUM(allocated) AS alloc, SUM(spent) AS sp FROM budgets WHERE tenant_id=%s", (tenant_id,))
         brow = cur.fetchone()
         alloc = brow["alloc"] or 0
         spent = brow["sp"] or 0
@@ -316,31 +329,31 @@ def _cmd_weekly_report(client):
     )
 
 
-def _cmd_forecast(client):
+def _cmd_forecast(client, tenant_id: str):
     with db_cursor() as cur:
         # Approved invoices = outflows
         cur.execute(
             "SELECT SUM(amount) AS total FROM invoices WHERE tenant_id=%s AND status='approved' AND created_at > NOW() - INTERVAL '30 days'",
-            (TENANT_ID,)
+            (tenant_id,)
         )
         outflow = cur.fetchone()["total"] or 0
 
         # Expenses paid out
         cur.execute(
             "SELECT SUM(amount) AS total FROM expenses WHERE tenant_id=%s AND created_at > NOW() - INTERVAL '30 days'",
-            (TENANT_ID,)
+            (tenant_id,)
         )
         exp_total = cur.fetchone()["total"] or 0
 
         # Pending outflow
         cur.execute(
             "SELECT SUM(amount) AS total FROM invoices WHERE tenant_id=%s AND status='pending'",
-            (TENANT_ID,)
+            (tenant_id,)
         )
         pending_outflow = cur.fetchone()["total"] or 0
 
         # Budget remaining
-        cur.execute("SELECT SUM(allocated) AS alloc, SUM(spent) AS sp FROM budgets WHERE tenant_id=%s", (TENANT_ID,))
+        cur.execute("SELECT SUM(allocated) AS alloc, SUM(spent) AS sp FROM budgets WHERE tenant_id=%s", (tenant_id,))
         brow = cur.fetchone()
         alloc = brow["alloc"] or 0
         spent = brow["sp"] or 0
@@ -355,9 +368,9 @@ def _cmd_forecast(client):
     )
 
 
-def _cmd_patterns(client):
+def _cmd_patterns(client, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
-    mem = AgentMemory("FinanceAgent", TENANT_ID)
+    mem = AgentMemory("FinanceAgent", tenant_id)
     patterns = mem.get_patterns(min_occurrences=2)
     if not patterns:
         client.post_message("No patterns detected yet.")
@@ -368,9 +381,9 @@ def _cmd_patterns(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_memory(client):
+def _cmd_memory(client, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
-    mem = AgentMemory("FinanceAgent", TENANT_ID)
+    mem = AgentMemory("FinanceAgent", tenant_id)
     events = mem.search_knowledge("")
     if not events:
         client.post_message("No memory events recorded yet.")
@@ -381,9 +394,9 @@ def _cmd_memory(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_knowledge(client, query: str):
+def _cmd_knowledge(client, query: str, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
-    mem = AgentMemory("FinanceAgent", TENANT_ID)
+    mem = AgentMemory("FinanceAgent", tenant_id)
     results = mem.search_knowledge(query)
     if not results:
         client.post_message(f"No memory found for '{query}'.")
@@ -398,6 +411,7 @@ def _cmd_knowledge(client, query: str):
 
 def _handle_deal_won(client, text: str):
     """DEAL_WON: customer=X amount=Y"""
+    tenant_id = client.tenant_id
     parts = {}
     for p in text.replace("DEAL_WON:", "").strip().split():
         if "=" in p:
@@ -417,7 +431,7 @@ def _handle_deal_won(client, text: str):
             INSERT INTO invoices (tenant_id, vendor, amount, category, status, notes)
             VALUES (%s, %s, %s, 'revenue', 'approved', %s) RETURNING id
             """,
-            (TENANT_ID, customer, amount, f"Auto-created from SalesAgent DEAL_WON")
+            (tenant_id, customer, amount, f"Auto-created from SalesAgent DEAL_WON")
         )
         inv_id = cur.fetchone()["id"]
 
@@ -426,6 +440,65 @@ def _handle_deal_won(client, text: str):
         f"Customer: *{customer}* | Amount: {_fmt_v(amount)} | invoice-{inv_id:03d}"
     )
     logger.info(f"FinanceAgent logged revenue from DEAL_WON: {customer} {amount}")
+
+
+# ── Modal data-variant functions ──────────────────────────────────────────────
+
+def cmd_invoice_data(client, data: dict, sender: str, tenant_id: str):
+    from app.Services.ValidationService import validate_money, validate_date
+    amount, _ = validate_money(data["amount"])
+    due_date = None
+    if data.get("due_date"):
+        due_date, _ = validate_date(data["due_date"])
+    category = data.get("category") or ""
+    with db_cursor() as cur:
+        cur.execute(
+            "INSERT INTO invoices (tenant_id, vendor, amount, due_date, category, submitted_by) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
+            (tenant_id, data["vendor"], amount, due_date, category, f"@{sender}")
+        )
+        inv_id = cur.fetchone()["id"]
+    client.post_message(
+        f"Invoice logged (invoice-{inv_id:03d})\n*{data['vendor']}* | {_fmt_v(amount)} | due: {due_date or 'not set'} | category: {category or 'none'}\n"
+        f"Status: pending — reply `@FinanceAgent approve: invoice-{inv_id:03d}` to approve"
+    )
+
+
+def cmd_expense_data(client, data: dict, sender: str, tenant_id: str):
+    from app.Services.ValidationService import validate_money, validate_date
+    from datetime import date
+    amount, _ = validate_money(data["amount"])
+    submitter = data["submitter"]
+    if submitter.lower() == "me":
+        submitter = sender
+    expense_date = date.today()
+    if data.get("expense_date"):
+        parsed, _ = validate_date(data["expense_date"])
+        if parsed:
+            expense_date = parsed
+    with db_cursor() as cur:
+        cur.execute(
+            "INSERT INTO expenses (tenant_id, submitter, amount, category, expense_date, status) VALUES (%s,%s,%s,%s,%s,'pending') RETURNING id",
+            (tenant_id, submitter, amount, data["category"], expense_date)
+        )
+        exp_id = cur.fetchone()["id"]
+    client.post_message(
+        f"Expense claim #{exp_id} logged\n{submitter} | {_fmt_v(amount)} | {data['category']} | {expense_date}\nStatus: pending approval"
+    )
+
+
+def cmd_reject_invoice_data(client, data: dict, sender: str, tenant_id: str):
+    inv_id = str(data["invoice_id"]).replace("invoice-", "").strip()
+    reason = data["reason"]
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE invoices SET status='rejected', notes=%s WHERE id=%s AND tenant_id=%s RETURNING id, vendor",
+            (f"Rejected by @{sender}: {reason}", inv_id, tenant_id)
+        )
+        row = cur.fetchone()
+    if row:
+        client.post_message(f"Invoice-{row['id']:03d} (*{row['vendor']}*) rejected — reason: {reason}")
+    else:
+        client.post_message(f"Invoice '{data['invoice_id']}' not found.")
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

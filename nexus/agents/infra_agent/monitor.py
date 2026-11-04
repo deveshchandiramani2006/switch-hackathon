@@ -62,9 +62,6 @@ def check_services(client):
             logger.warning(f"Service {svc['name']} DOWN after {fails} failures")
 
 
-TENANT_ID = "default"
-
-
 def start_monitor(client):
     scheduler = BackgroundScheduler()
 
@@ -76,7 +73,7 @@ def start_monitor(client):
     )
     # Daily 9 AM digest
     scheduler.add_job(
-        lambda: post_morning_digest(client, "InfraAgent", TENANT_ID),
+        lambda: post_morning_digest(client, "InfraAgent", client.tenant_id),
         "cron",
         hour=9,
         minute=0,
@@ -84,7 +81,7 @@ def start_monitor(client):
     )
     # Proactive checks every 6h
     scheduler.add_job(
-        lambda: run_proactive_check(client, "InfraAgent", TENANT_ID),
+        lambda: run_proactive_check(client, "InfraAgent", client.tenant_id),
         "interval",
         hours=6,
         id="infra_proactive"

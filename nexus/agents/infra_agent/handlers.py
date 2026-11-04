@@ -9,6 +9,8 @@ def handle_message(client, payload: dict):
     text       = payload.get("text", "").strip()
     sender     = payload.get("sender", "")
     is_mention = payload.get("is_mention", False)
+    room_id    = payload.get("room_id", client.room_id)
+    tenant_id  = client.tenant_id
 
     if not text or sender in ("InfraAgent", "NEXUS"):
         return
@@ -21,13 +23,25 @@ def handle_message(client, payload: dict):
             clean = clean[len(p):]
             break
 
-    t = clean.lower().strip()
+    from app.Services import ConversationService
+    if ConversationService.resume(tenant_id, room_id, sender, "InfraAgent", clean, client):
+        return
+
+    route_command(client, clean, sender, tenant_id, room_id)
+
+
+def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
+    t = text.lower().strip()
     if t.startswith("status"):
-        show_status(client)
+        show_status(client, tenant_id)
     elif t.startswith("ping:"):
-        ping_service(client, clean.split(":", 1)[1].strip())
+        ping_service(client, text.split(":", 1)[1].strip())
+    elif t == "add":
+        # Bare "add" with no args → start wizard
+        from app.Services import ConversationService
+        ConversationService.start(tenant_id, room_id, sender, "InfraAgent", "add_service", client)
     elif t.startswith("add:"):
-        add_service(client, clean.split(":", 1)[1].strip())
+        add_service(client, text.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("jobs"):
         client.post_message(
             "Job monitoring: health checks run every 5 min.\n"
@@ -38,15 +52,17 @@ def handle_message(client, payload: dict):
             "Commands:\n"
             "- `@InfraAgent status`\n"
             "- `@InfraAgent ping: url`\n"
-            "- `@InfraAgent add: name -> url`"
+            "- `@InfraAgent add: name -> url`\n"
+            "- `@InfraAgent add` (guided wizard)"
         )
 
 
-def show_status(client):
+def show_status(client, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             "SELECT name, url, status, last_status_code, last_checked_at, consecutive_failures "
-            "FROM monitored_services ORDER BY name"
+            "FROM monitored_services WHERE tenant_id=%s ORDER BY name",
+            (tenant_id,)
         )
         rows = cur.fetchall()
     if not rows:
@@ -77,7 +93,7 @@ def ping_service(client, url: str):
         client.post_message(f"[DOWN] {url} -- unreachable: {e}")
 
 
-def add_service(client, text: str):
+def add_service(client, text: str, tenant_id: str):
     # Format: "service-name -> https://url"
     if "->" in text:
         parts = text.split("->", 1)
@@ -90,12 +106,32 @@ def add_service(client, text: str):
     url  = parts[1].strip()
     with db_cursor() as cur:
         cur.execute(
-            "INSERT INTO monitored_services (name, url) VALUES (%s, %s) "
-            "ON CONFLICT (name) DO NOTHING RETURNING id",
-            (name, url)
+            "INSERT INTO monitored_services (tenant_id, name, url) VALUES (%s, %s, %s) "
+            "ON CONFLICT (tenant_id, name) DO NOTHING RETURNING id",
+            (tenant_id, name, url)
         )
         row = cur.fetchone()
     if row:
         client.post_message(f"Now monitoring *{name}*\n{url}")
     else:
         client.post_message(f"Already monitoring *{name}*")
+
+
+def cmd_add_service_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ConversationService after wizard completes."""
+    from app.Services.ValidationService import validate_url
+    url, err = validate_url(data["url"])
+    if err:
+        client.post_message(f"[X] {err}")
+        return
+    with db_cursor() as cur:
+        cur.execute(
+            "INSERT INTO monitored_services (tenant_id, name, url) VALUES (%s,%s,%s) "
+            "ON CONFLICT (tenant_id, name) DO NOTHING RETURNING id",
+            (tenant_id, data["name"], url)
+        )
+        row = cur.fetchone()
+    if row:
+        client.post_message(f"Now monitoring *{data['name']}*\n{url}")
+    else:
+        client.post_message(f"Already monitoring *{data['name']}*")

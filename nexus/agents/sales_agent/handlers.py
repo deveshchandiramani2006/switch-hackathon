@@ -12,71 +12,87 @@ logger = logging.getLogger(__name__)
 def handle_message(client, payload: dict):
     text       = payload.get("text", "").strip()
     sender     = payload.get("sender", "")
+    room_id    = payload.get("room_id", client.room_id)
     is_mention = payload.get("is_mention", False)
+    tenant_id  = client.tenant_id
 
     if not text or sender in ("SalesAgent", "NEXUS"):
         return
 
     # Cross-agent signal from GeoSEOAgent
     if text.startswith("GEO_SIGNAL:"):
-        _handle_geo_signal(client, text)
+        _handle_geo_signal(client, text, tenant_id)
         return
 
     if is_mention:
-        # Strip @SalesAgent prefix
         clean = text.split(">", 1)[-1].strip() if ">" in text else text
         for prefix in ["@SalesAgent ", "@salesagent "]:
             if clean.lower().startswith(prefix.lower()):
                 clean = clean[len(prefix):]
                 break
-        route_command(client, clean, sender)
+        # Resume active modal session first
+        from app.Services import ConversationService
+        if ConversationService.resume(tenant_id, room_id, sender, "SalesAgent", clean, client):
+            return
+        route_command(client, clean, sender, tenant_id, room_id)
     else:
-        detect_commitment(client, text, sender)
+        from app.Services import ConversationService
+        if ConversationService.resume(tenant_id, room_id, sender, "SalesAgent", text, client):
+            return
+        detect_commitment(client, text, sender, tenant_id)
 
 
-def route_command(client, text: str, sender: str):
+def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     t = text.lower().strip()
+    from app.Services import ConversationService
 
-    if t.startswith("new lead:"):
-        cmd_new_lead(client, text, sender)
+    if t in ("new lead", "new lead:"):
+        ConversationService.start(tenant_id, room_id, sender, "SalesAgent", "new_lead", client)
+    elif t.startswith("new lead:") and len(t) > len("new lead:"):
+        cmd_new_lead(client, text, sender, tenant_id)
     elif t.startswith("pipeline"):
-        cmd_pipeline(client, text, sender)
+        cmd_pipeline(client, text, sender, tenant_id)
     elif t.startswith("follow up:"):
-        cmd_follow_up(client, text, sender)
-    elif t.startswith("format:"):
-        cmd_format(client, text, sender)
+        cmd_follow_up(client, text, sender, tenant_id)
+    elif t in ("format", "format:"):
+        ConversationService.start(tenant_id, room_id, sender, "SalesAgent", "format_message", client)
+    elif t.startswith("format:") and len(t) > len("format:"):
+        cmd_format(client, text, sender, tenant_id)
     elif t.startswith("won:"):
-        cmd_won(client, text, sender)
+        cmd_won(client, text, sender, tenant_id)
     elif t.startswith("lost:"):
-        cmd_lost(client, text, sender)
-    elif t.startswith("set commitment:"):
-        cmd_set_commitment(client, text, sender)
+        cmd_lost(client, text, sender, tenant_id)
+    elif t in ("set commitment", "set commitment:"):
+        ConversationService.start(tenant_id, room_id, sender, "SalesAgent", "set_commitment", client)
+    elif t.startswith("set commitment:") and len(t) > len("set commitment:"):
+        cmd_set_commitment(client, text, sender, tenant_id)
     elif t.startswith("stale"):
-        cmd_stale_leads(client, sender)
+        cmd_stale_leads(client, sender, tenant_id)
     elif t.startswith("lead:"):
-        cmd_lead_card(client, text, sender)
+        cmd_lead_card(client, text, sender, tenant_id)
     elif t.startswith("patterns"):
-        _cmd_patterns(client)
+        _cmd_patterns(client, tenant_id)
     elif t.startswith("memory"):
-        _cmd_memory(client)
+        _cmd_memory(client, tenant_id)
     elif t.startswith("knowledge:"):
-        _cmd_knowledge(client, text.split(":", 1)[1].strip())
+        _cmd_knowledge(client, text.split(":", 1)[1].strip(), tenant_id)
     else:
         client.post_message(
             "Commands:\n"
-            "- `@SalesAgent new lead: Name, Role, City, Industry, Value`\n"
+            "- `@SalesAgent new lead` — guided form\n"
+            "- `@SalesAgent new lead: Name, Role, City, Industry, Value` — quick add\n"
             "- `@SalesAgent pipeline`\n"
             "- `@SalesAgent lead: Name`\n"
             "- `@SalesAgent follow up: Name`\n"
-            "- `@SalesAgent format: [msg] as: executive`\n"
+            "- `@SalesAgent format` — guided form\n"
             "- `@SalesAgent won: Name` / `lost: Name -- reason: ...`\n"
-            "- `@SalesAgent set commitment: Name will do X by Date`\n"
+            "- `@SalesAgent set commitment` — guided form\n"
             "- `@SalesAgent stale leads`\n"
             "- `@SalesAgent patterns` / `memory` / `knowledge: keyword`"
         )
 
 
-def _handle_geo_signal(client, text: str):
+def _handle_geo_signal(client, text: str, tenant_id: str):
     """GEO_SIGNAL: keyword=X geo=Y volume=Z trend=T"""
     from app.Services.DatabaseService import db_cursor
     parts = {}
@@ -90,14 +106,16 @@ def _handle_geo_signal(client, text: str):
     volume  = parts.get("volume", "?")
     trend   = parts.get("trend", "0")
 
-    # Count leads in that geo area
+    # Count leads in that geo area filtered by tenant
     lead_count = 0
     if geo:
         try:
             with db_cursor() as cur:
                 cur.execute(
-                    "SELECT COUNT(*) AS cnt FROM leads WHERE LOWER(city) LIKE LOWER(%s) AND stage NOT IN ('Closed-Won','Closed-Lost')",
-                    (f"%{geo}%",)
+                    "SELECT COUNT(*) AS cnt FROM leads "
+                    "WHERE tenant_id = %s AND LOWER(city) LIKE LOWER(%s) "
+                    "AND stage NOT IN ('Closed-Won','Closed-Lost')",
+                    (tenant_id, f"%{geo}%")
                 )
                 lead_count = cur.fetchone()["cnt"]
         except Exception:
@@ -110,7 +128,7 @@ def _handle_geo_signal(client, text: str):
     )
 
 
-def _cmd_patterns(client):
+def _cmd_patterns(client, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SalesAgent")
     patterns = mem.get_patterns(min_occurrences=2)
@@ -123,7 +141,7 @@ def _cmd_patterns(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_memory(client):
+def _cmd_memory(client, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SalesAgent")
     events = mem.search_knowledge("")
@@ -136,7 +154,7 @@ def _cmd_memory(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_knowledge(client, query: str):
+def _cmd_knowledge(client, query: str, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SalesAgent")
     results = mem.search_knowledge(query)

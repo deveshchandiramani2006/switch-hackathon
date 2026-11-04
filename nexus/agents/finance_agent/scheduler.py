@@ -8,15 +8,13 @@ from app.Services.ProactiveService import run_proactive_check
 
 logger = logging.getLogger(__name__)
 
-TENANT_ID = "default"
-
 
 def start_finance_scheduler(client):
     scheduler = BackgroundScheduler()
 
     # Daily 9 AM digest
     scheduler.add_job(
-        lambda: post_morning_digest(client, "FinanceAgent", TENANT_ID),
+        lambda: post_morning_digest(client, "FinanceAgent", client.tenant_id),
         "cron",
         hour=9,
         minute=0,
@@ -44,7 +42,7 @@ def start_finance_scheduler(client):
 
     # Proactive intelligence every 6h
     scheduler.add_job(
-        lambda: run_proactive_check(client, "FinanceAgent", TENANT_ID),
+        lambda: run_proactive_check(client, "FinanceAgent", client.tenant_id),
         "interval",
         hours=6,
         id="finance_proactive"
@@ -67,7 +65,7 @@ def _invoice_reminders(client):
                   AND due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days'
                 ORDER BY due_date ASC
                 """,
-                (TENANT_ID,)
+                (client.tenant_id,)
             )
             due_soon = cur.fetchall()
 
@@ -83,4 +81,4 @@ def _invoice_reminders(client):
 
 def _weekly_report(client):
     from agents.finance_agent.handlers import _cmd_weekly_report
-    _cmd_weekly_report(client)
+    _cmd_weekly_report(client, client.tenant_id)

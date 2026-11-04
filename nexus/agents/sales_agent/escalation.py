@@ -20,7 +20,8 @@ LEVEL_TONES = {
 
 
 def check_and_escalate(client):
-    chain = Config.get_escalation_chain("sales")
+    from app.Models.TenantConfig import TenantConfig
+    chain = TenantConfig.get_escalation_chain(client.tenant_id, "sales")
     levels = chain.get("levels", [])
     if not levels:
         return
@@ -87,9 +88,6 @@ def check_and_escalate(client):
         logger.info(f"Commitment #{c['id']} escalated to level {new_level} -> {target}")
 
 
-TENANT_ID = "default"
-
-
 def start_escalation_scheduler(client):
     interval = int(os.getenv("ESCALATION_CHECK_MINUTES", "60"))
     scheduler = BackgroundScheduler()
@@ -102,7 +100,7 @@ def start_escalation_scheduler(client):
     )
     # Daily 9 AM digest
     scheduler.add_job(
-        lambda: post_morning_digest(client, "SalesAgent", TENANT_ID),
+        lambda: post_morning_digest(client, "SalesAgent", client.tenant_id),
         "cron",
         hour=9,
         minute=0,
@@ -110,7 +108,7 @@ def start_escalation_scheduler(client):
     )
     # Proactive checks every 6h
     scheduler.add_job(
-        lambda: run_proactive_check(client, "SalesAgent", TENANT_ID),
+        lambda: run_proactive_check(client, "SalesAgent", client.tenant_id),
         "interval",
         hours=6,
         id="sales_proactive"

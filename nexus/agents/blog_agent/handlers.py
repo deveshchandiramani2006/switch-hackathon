@@ -24,21 +24,23 @@ def handle_message(client, payload: dict):
     text       = payload.get("text", "").strip()
     sender     = payload.get("sender", "")
     is_mention = payload.get("is_mention", False)
+    room_id    = payload.get("room_id", client.room_id)
+    tenant_id  = client.tenant_id
 
     if not text or sender in ("BlogAgent", "NEXUS"):
         return
 
     # Cross-agent brief from GeoSEOAgent
     if text.startswith("BRIEF:"):
-        handle_brief(client, text)
+        handle_brief(client, text, tenant_id=tenant_id)
         return
 
-    # Approve / reject without @mention
-    if text.lower().strip() in ("approve", "yes"):
-        approve_top_draft(client, sender)
+    # Scoped approval must include explicit draft ID: "approve #42" or "reject #42"
+    if text.lower().startswith("approve #"):
+        _handle_approve_cmd(client, text, sender, tenant_id)
         return
-    if text.lower().strip() in ("reject", "no"):
-        reject_top_draft(client, sender)
+    if text.lower().startswith("reject #"):
+        _handle_reject_cmd(client, text, sender, tenant_id)
         return
 
     if not is_mention:
@@ -50,42 +52,179 @@ def handle_message(client, payload: dict):
             clean = clean[len(p):]
             break
 
+    from app.Services import ConversationService
+    if ConversationService.resume(tenant_id, room_id, sender, "BlogAgent", clean, client):
+        return
+
     t = clean.lower().strip()
-    if t.startswith("draft:"):
-        manual_draft(client, clean.split(":", 1)[1].strip())
+    if t == "draft":
+        # Bare "draft" with no topic → start wizard
+        ConversationService.start(tenant_id, room_id, sender, "BlogAgent", "draft_post", client)
+    elif t.startswith("draft:"):
+        manual_draft(client, clean.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("queue"):
-        show_queue(client)
+        show_queue(client, tenant_id)
     elif t.startswith("preview:"):
-        preview_draft(client, clean.split(":", 1)[1].strip())
+        preview_draft(client, clean.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("approve:"):
-        # approve: change CTA to "Book a demo" — approve with edits
+        # approve: change CTA to "Book a demo" — approve with edits (uses top draft for backwards compat)
         edit_instruction = clean.split(":", 1)[1].strip()
-        approve_top_draft(client, sender, with_edits=edit_instruction)
+        approve_top_draft(client, sender, tenant_id, with_edits=edit_instruction)
     elif t.startswith("delegate to"):
-        # delegate to @name
         delegate_to = clean.replace("delegate to", "").strip().lstrip("@")
         client.post_message(f"Draft delegated to @{delegate_to} for review.")
     elif t.startswith("patterns"):
-        _cmd_patterns(client)
+        _cmd_patterns(client, tenant_id)
     elif t.startswith("memory"):
-        _cmd_memory(client)
+        _cmd_memory(client, tenant_id)
     elif t.startswith("knowledge:"):
-        _cmd_knowledge(client, clean.split(":", 1)[1].strip())
+        _cmd_knowledge(client, clean.split(":", 1)[1].strip(), tenant_id)
     else:
         client.post_message(
             "Commands:\n"
             "- `@BlogAgent draft: topic`\n"
+            "- `@BlogAgent draft` (guided wizard)\n"
             "- `@BlogAgent queue`\n"
             "- `@BlogAgent preview: #id`\n"
-            "- Type `approve` or `reject` for top draft\n"
-            "- `@BlogAgent approve: change CTA to X` — approve with edits\n"
+            "- `approve #42` or `approve #42 -- edit: change CTA to X`\n"
+            "- `reject #42` or `reject #42 -- reason: too promotional`\n"
+            "- `@BlogAgent approve: change CTA to X` — approve top draft with edits\n"
             "- `@BlogAgent delegate to @name`\n"
             "- `@BlogAgent patterns` / `memory` / `knowledge: keyword`"
         )
 
 
-def handle_brief(client, text: str):
-    # Parse: "BRIEF: keyword=X volume=Y trend=Z queue_id=N reason=W"
+# ---------------------------------------------------------------------------
+# Scoped approval helpers
+# ---------------------------------------------------------------------------
+
+def _handle_approve_cmd(client, text: str, sender: str, tenant_id: str):
+    """approve #42 or approve #42 -- edit: change CTA"""
+    parts = text.strip().split("--", 1)
+    id_part = parts[0].replace("approve", "").strip().lstrip("#")
+    edit_instruction = None
+    if len(parts) > 1:
+        edit_part = parts[1].strip()
+        if edit_part.lower().startswith("edit:"):
+            edit_instruction = edit_part[5:].strip()
+    try:
+        draft_id = int(id_part)
+    except ValueError:
+        client.post_message("Usage: `approve #42` or `approve #42 -- edit: change CTA to X`")
+        return
+    approve_draft_by_id(client, draft_id, sender, tenant_id, with_edits=edit_instruction)
+
+
+def _handle_reject_cmd(client, text: str, sender: str, tenant_id: str):
+    """reject #42 or reject #42 -- reason: too long"""
+    parts = text.strip().split("--", 1)
+    id_part = parts[0].replace("reject", "").strip().lstrip("#")
+    reason = "no reason given"
+    if len(parts) > 1:
+        reason_part = parts[1].strip()
+        if reason_part.lower().startswith("reason:"):
+            reason = reason_part[7:].strip()
+        else:
+            reason = reason_part
+    try:
+        draft_id = int(id_part)
+    except ValueError:
+        client.post_message("Usage: `reject #42` or `reject #42 -- reason: too promotional`")
+        return
+    reject_draft_by_id(client, draft_id, sender, tenant_id, reason=reason)
+
+
+def approve_draft_by_id(client, draft_id: int, sender: str, tenant_id: str, with_edits=None):
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT id, keyword, title, draft_content, meta_description FROM content_queue WHERE id=%s AND tenant_id=%s",
+            (draft_id, tenant_id)
+        )
+        draft = cur.fetchone()
+    if not draft:
+        client.post_message(f"Draft #{draft_id} not found.")
+        return
+
+    # Mark as publishing to prevent double-approval
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE content_queue SET status='publishing' WHERE id=%s AND tenant_id=%s",
+            (draft_id, tenant_id)
+        )
+
+    # Apply edits if requested
+    if with_edits:
+        client.post_message(f"Applying edit: _{with_edits}_...")
+        new_body = llm.complete(
+            f"Apply this edit to the blog post:\nEdit instruction: {with_edits}\n\nOriginal:\n{draft['draft_content']}\n\nReturn the full updated post body only."
+        )
+        with db_cursor() as cur:
+            cur.execute(
+                "UPDATE content_queue SET draft_content=%s WHERE id=%s",
+                (new_body, draft_id)
+            )
+        # Reload
+        with db_cursor() as cur:
+            cur.execute(
+                "SELECT id, keyword, title, draft_content, meta_description FROM content_queue WHERE id=%s",
+                (draft_id,)
+            )
+            draft = cur.fetchone()
+
+    # Publish
+    url = publish_post(draft)
+    if url:
+        with db_cursor() as cur:
+            cur.execute(
+                "UPDATE content_queue SET status='published', published_url=%s, published_at=NOW() WHERE id=%s",
+                (url, draft_id)
+            )
+        client.post_message(f"Published -> {url}")
+        client.safe_signal("GeoSEOAgent", f"POST_PUBLISHED: keyword={draft['keyword'].replace(' ', '_')} url={url}")
+    else:
+        with db_cursor() as cur:
+            cur.execute(
+                "UPDATE content_queue SET status='draft_ready' WHERE id=%s",
+                (draft_id,)
+            )
+        client.post_message("Publish failed. Draft returned to queue.")
+
+
+def reject_draft_by_id(client, draft_id: int, sender: str, tenant_id: str, reason: str = ""):
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE content_queue SET status='rejected', brief_notes=%s WHERE id=%s AND tenant_id=%s RETURNING id, keyword",
+            (f"Rejected by @{sender}: {reason}", draft_id, tenant_id)
+        )
+        row = cur.fetchone()
+    if row:
+        client.post_message(f"Draft #{row['id']} ({row['keyword']}) rejected. Reason: {reason}")
+    else:
+        client.post_message(f"Draft #{draft_id} not found.")
+
+
+# ---------------------------------------------------------------------------
+# Modal wizard data handler
+# ---------------------------------------------------------------------------
+
+def cmd_draft_post_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ConversationService after wizard completes."""
+    geo   = data.get("geo") or "India"
+    tone  = data.get("tone") or "informative"
+    topic = data["topic"]
+    handle_brief(
+        client,
+        f"BRIEF: keyword={topic.replace(' ', '_')} volume=0 trend=0 reason={tone} geo={geo.replace(' ', '_')}",
+        tenant_id=tenant_id
+    )
+
+
+# ---------------------------------------------------------------------------
+# Core handlers
+# ---------------------------------------------------------------------------
+
+def handle_brief(client, text: str, tenant_id: str = "default"):
+    # Parse: "BRIEF: keyword=X volume=Y trend=Z queue_id=N reason=W geo=G"
     parts = {}
     for p in text.replace("BRIEF:", "").strip().split():
         if "=" in p:
@@ -96,6 +235,7 @@ def handle_brief(client, text: str):
     trend    = parts.get("trend", "0")
     queue_id = parts.get("queue_id")
     reason   = parts.get("reason", "content_opportunity").replace("_", " ")
+    geo      = parts.get("geo", "India").replace("_", " ")
 
     client.post_message(
         f"*Brief received:* {keyword}\n"
@@ -104,7 +244,7 @@ def handle_brief(client, text: str):
     )
 
     draft_text = llm.complete(
-        DRAFT_PROMPT.format(keyword=keyword, geo="India", reason=reason)
+        DRAFT_PROMPT.format(keyword=keyword, geo=geo, reason=reason)
     )
 
     # Parse title/meta from draft
@@ -126,19 +266,19 @@ def handle_brief(client, text: str):
                 """
                 UPDATE content_queue
                 SET title=%s, meta_description=%s, draft_content=%s, status='draft_ready'
-                WHERE id=%s RETURNING id
+                WHERE id=%s AND tenant_id=%s RETURNING id
                 """,
-                (title, meta, body, queue_id)
+                (title, meta, body, queue_id, tenant_id)
             )
             row = cur.fetchone()
             q_id = row["id"] if row else queue_id
         else:
             cur.execute(
                 """
-                INSERT INTO content_queue (keyword, title, meta_description, draft_content, status, source)
-                VALUES (%s, %s, %s, %s, 'draft_ready', 'manual') RETURNING id
+                INSERT INTO content_queue (tenant_id, keyword, title, meta_description, draft_content, status, source)
+                VALUES (%s, %s, %s, %s, %s, 'draft_ready', 'manual') RETURNING id
                 """,
-                (keyword, title, meta, body)
+                (tenant_id, keyword, title, meta, body)
             )
             q_id = cur.fetchone()["id"]
 
@@ -147,101 +287,41 @@ def handle_brief(client, text: str):
         f"*Draft ready* (#{q_id})\n"
         f"*{title}*\n_{meta}_\n\n"
         f"{preview}\n\n"
-        f"Reply `approve` to publish or `reject` to discard."
+        f"Reply `approve #{q_id}` to publish or `reject #{q_id}` to discard."
     )
 
 
-def approve_top_draft(client, sender: str, with_edits: str = None):
+def approve_top_draft(client, sender: str, tenant_id: str, with_edits: str = None):
+    """Backwards-compatible: approve the oldest draft_ready item for this tenant."""
     with db_cursor() as cur:
         cur.execute(
             """
             SELECT id, keyword, title, draft_content, meta_description
-            FROM content_queue WHERE status='draft_ready'
+            FROM content_queue WHERE status='draft_ready' AND tenant_id=%s
             ORDER BY created_at ASC LIMIT 1
-            """
+            """,
+            (tenant_id,)
         )
         draft = cur.fetchone()
     if not draft:
         client.post_message("No drafts waiting for approval.")
         return
-
-    # If edits requested, apply them via LLM before publishing
-    if with_edits:
-        client.post_message(f"Applying edit: _{with_edits}_...")
-        new_body = llm.complete(
-            f"Apply this edit to the blog post:\nEdit instruction: {with_edits}\n\n"
-            f"Original post:\n{draft['draft_content']}\n\n"
-            f"Return the full updated post body only."
-        )
-        with db_cursor() as cur:
-            cur.execute(
-                "UPDATE content_queue SET draft_content=%s WHERE id=%s",
-                (new_body, draft["id"])
-            )
-        # Reload draft with updated content
-        with db_cursor() as cur:
-            cur.execute(
-                "SELECT id, keyword, title, draft_content, meta_description FROM content_queue WHERE id=%s",
-                (draft["id"],)
-            )
-            draft = cur.fetchone()
-
-    # Mark as publishing to prevent double-approval
-    with db_cursor() as cur:
-        cur.execute(
-            "UPDATE content_queue SET status='publishing' WHERE id=%s",
-            (draft["id"],)
-        )
-
-    url = publish_post(draft)
-
-    if url:
-        with db_cursor() as cur:
-            cur.execute(
-                "UPDATE content_queue SET status='published', published_url=%s, published_at=NOW() WHERE id=%s",
-                (url, draft["id"])
-            )
-        client.post_message(f"Published -> {url}")
-        signal = f"POST_PUBLISHED: keyword={draft['keyword'].replace(' ', '_')} url={url}"
-        client.safe_signal("GeoSEOAgent", signal)
-    else:
-        with db_cursor() as cur:
-            cur.execute(
-                "UPDATE content_queue SET status='draft_ready' WHERE id=%s",
-                (draft["id"],)
-            )
-        client.post_message("Publish failed. Draft returned to queue. Check BLOG_API config.")
+    approve_draft_by_id(client, draft["id"], sender, tenant_id, with_edits=with_edits)
 
 
-def reject_top_draft(client, sender: str):
-    with db_cursor() as cur:
-        cur.execute(
-            """
-            UPDATE content_queue SET status='rejected'
-            WHERE id=(
-                SELECT id FROM content_queue
-                WHERE status='draft_ready'
-                ORDER BY created_at ASC LIMIT 1
-            )
-            RETURNING id, keyword
-            """
-        )
-        row = cur.fetchone()
-    if row:
-        client.post_message(f"Draft #{row['id']} ({row['keyword']}) rejected and removed from queue.")
-
-
-def manual_draft(client, topic: str):
+def manual_draft(client, topic: str, tenant_id: str):
     handle_brief(
         client,
-        f"BRIEF: keyword={topic.replace(' ', '_')} volume=0 trend=0 reason=manual_request"
+        f"BRIEF: keyword={topic.replace(' ', '_')} volume=0 trend=0 reason=manual_request",
+        tenant_id=tenant_id
     )
 
 
-def show_queue(client):
+def show_queue(client, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
-            "SELECT id, keyword, status, created_at FROM content_queue ORDER BY created_at DESC LIMIT 10"
+            "SELECT id, keyword, status, created_at FROM content_queue WHERE tenant_id=%s ORDER BY created_at DESC LIMIT 10",
+            (tenant_id,)
         )
         rows = cur.fetchall()
     if not rows:
@@ -253,7 +333,22 @@ def show_queue(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_patterns(client):
+def preview_draft(client, ref: str, tenant_id: str):
+    q_id = ref.lstrip("#").strip()
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT title, draft_content FROM content_queue WHERE id=%s AND tenant_id=%s",
+            (q_id, tenant_id)
+        )
+        row = cur.fetchone()
+    if not row:
+        client.post_message(f"Draft #{q_id} not found.")
+        return
+    preview = (row["draft_content"] or "")[:500] + "..."
+    client.post_message(f"*{row['title']}*\n\n{preview}")
+
+
+def _cmd_patterns(client, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("BlogAgent")
     patterns = mem.get_patterns(min_occurrences=2)
@@ -266,7 +361,7 @@ def _cmd_patterns(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_memory(client):
+def _cmd_memory(client, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("BlogAgent")
     events = mem.search_knowledge("")
@@ -279,7 +374,7 @@ def _cmd_memory(client):
     client.post_message("\n".join(lines))
 
 
-def _cmd_knowledge(client, query: str):
+def _cmd_knowledge(client, query: str, tenant_id: str):
     from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("BlogAgent")
     results = mem.search_knowledge(query)
@@ -290,18 +385,3 @@ def _cmd_knowledge(client, query: str):
     for r in results[:5]:
         lines.append(f"- [{r['event_type']}] {str(r['outcome'] or r['context'] or '')[:100]}")
     client.post_message("\n".join(lines))
-
-
-def preview_draft(client, ref: str):
-    q_id = ref.lstrip("#").strip()
-    with db_cursor() as cur:
-        cur.execute(
-            "SELECT title, draft_content FROM content_queue WHERE id=%s",
-            (q_id,)
-        )
-        row = cur.fetchone()
-    if not row:
-        client.post_message(f"Draft #{q_id} not found.")
-        return
-    preview = (row["draft_content"] or "")[:500] + "..."
-    client.post_message(f"*{row['title']}*\n\n{preview}")

@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 llm = LLMClient(agent="sales")
 
 
-def cmd_new_lead(client, text: str, sender: str):
+def cmd_new_lead(client, text: str, sender: str, tenant_id: str):
     """Parse: 'new lead: Priya Sharma, CTO, Mumbai, fintech, 2L'"""
     parts = text.split(":", 1)
     if len(parts) < 2:
@@ -26,10 +26,10 @@ def cmd_new_lead(client, text: str, sender: str):
     with db_cursor() as cur:
         cur.execute(
             """
-            INSERT INTO leads (name, role, city, industry, deal_value, rep_slack_user)
-            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+            INSERT INTO leads (tenant_id, name, role, city, industry, deal_value, rep_slack_user)
+            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
             """,
-            (name, role, city, industry, deal_value, f"@{sender}")
+            (tenant_id, name, role, city, industry, deal_value, f"@{sender}")
         )
         lead_id = cur.fetchone()["id"]
 
@@ -41,7 +41,32 @@ def cmd_new_lead(client, text: str, sender: str):
     )
 
 
-def cmd_pipeline(client, text: str, sender: str):
+def cmd_new_lead_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ConversationService after wizard collects all fields."""
+    from app.Services.ValidationService import validate_money
+    deal_str = data.get("deal_value") or "0"
+    deal_value, _ = validate_money(deal_str)
+
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO leads (tenant_id, name, role, city, industry, deal_value, rep_slack_user)
+            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+            """,
+            (tenant_id, data["name"], data["role"], data["city"],
+             data["industry"], deal_value, f"@{sender}")
+        )
+        lead_id = cur.fetchone()["id"]
+
+    client.post_message(
+        f"Lead added (#{lead_id})\n"
+        f"*{data['name']}* — {data['role']} @ {data['city']}\n"
+        f"Industry: {data['industry']} | Deal: {format_value(deal_value)}\n"
+        f"Stage: Prospect | Rep: @{sender}"
+    )
+
+
+def cmd_pipeline(client, text: str, sender: str, tenant_id: str):
     geo_filter = None
     if ":" in text:
         geo_filter = text.split(":", 1)[1].strip()
@@ -51,18 +76,19 @@ def cmd_pipeline(client, text: str, sender: str):
             cur.execute(
                 """
                 SELECT name, stage, deal_value, city, last_touched_at, rep_slack_user
-                FROM leads WHERE stage NOT IN ('Closed-Won','Closed-Lost')
+                FROM leads WHERE tenant_id = %s AND stage NOT IN ('Closed-Won','Closed-Lost')
                 AND LOWER(city) = LOWER(%s)
                 ORDER BY deal_value DESC
                 """,
-                (geo_filter,)
+                (tenant_id, geo_filter)
             )
         else:
             cur.execute(
                 """
                 SELECT name, stage, deal_value, city, last_touched_at, rep_slack_user
-                FROM leads ORDER BY deal_value DESC LIMIT 20
-                """
+                FROM leads WHERE tenant_id = %s ORDER BY deal_value DESC LIMIT 20
+                """,
+                (tenant_id,)
             )
         rows = cur.fetchall()
 
@@ -80,15 +106,15 @@ def cmd_pipeline(client, text: str, sender: str):
     client.post_message("\n".join(lines))
 
 
-def cmd_follow_up(client, text: str, sender: str):
+def cmd_follow_up(client, text: str, sender: str, tenant_id: str):
     name = text.split(":", 1)[1].strip() if ":" in text else ""
     if not name:
         client.post_message("Usage: `@SalesAgent follow up: Lead Name`")
         return
     with db_cursor() as cur:
         cur.execute(
-            "SELECT * FROM leads WHERE LOWER(name) LIKE LOWER(%s) LIMIT 1",
-            (f"%{name}%",)
+            "SELECT * FROM leads WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
+            (tenant_id, f"%{name}%")
         )
         lead = cur.fetchone()
     if not lead:
@@ -106,7 +132,7 @@ def cmd_follow_up(client, text: str, sender: str):
     )
 
 
-def cmd_format(client, text: str, sender: str):
+def cmd_format(client, text: str, sender: str, tenant_id: str):
     tone = "professional"
     if " as: " in text.lower():
         idx = text.lower().find(" as: ")
@@ -129,13 +155,30 @@ def cmd_format(client, text: str, sender: str):
     client.post_message(f"*Formatted ({tone}):*\n\n{formatted}")
 
 
-def cmd_won(client, text: str, sender: str):
+def cmd_format_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ConversationService after wizard collects message and style."""
+    tone_map = {
+        "executive": "concise, professional, bottom-line first, no filler",
+        "casual":    "warm, conversational, first-name basis",
+        "technical": "precise, detail-oriented, terminology-rich",
+        "formal":    "formal, full names, passive voice",
+        "sales":     "value-focused, outcome-oriented, creates mild urgency",
+    }
+    tone = data.get("style", "executive").lower()
+    tone_desc = tone_map.get(tone, "professional and clear")
+    formatted = llm.complete(
+        f"Reformat this message in a {tone_desc} tone. Output only the reformatted message:\n\n{data['message']}"
+    )
+    client.post_message(f"*Formatted ({tone}):*\n\n{formatted}")
+
+
+def cmd_won(client, text: str, sender: str, tenant_id: str):
     name = text.split(":", 1)[1].strip() if ":" in text else ""
     with db_cursor() as cur:
         cur.execute(
             "UPDATE leads SET stage = 'Closed-Won', updated_at = NOW() "
-            "WHERE LOWER(name) LIKE LOWER(%s) RETURNING name, deal_value",
-            (f"%{name}%",)
+            "WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s) RETURNING name, deal_value",
+            (tenant_id, f"%{name}%")
         )
         row = cur.fetchone()
     if row:
@@ -155,28 +198,28 @@ def cmd_won(client, text: str, sender: str):
         client.post_message(f"Lead '{name}' not found.")
 
 
-def cmd_lost(client, text: str, sender: str):
+def cmd_lost(client, text: str, sender: str, tenant_id: str):
     parts = text.split("--")
     name = parts[0].split(":", 1)[1].strip() if ":" in parts[0] else ""
     reason = parts[1].split(":", 1)[1].strip() if len(parts) > 1 and ":" in parts[1] else "unspecified"
     with db_cursor() as cur:
         cur.execute(
             "UPDATE leads SET stage = 'Closed-Lost', notes = %s, updated_at = NOW() "
-            "WHERE LOWER(name) LIKE LOWER(%s)",
-            (f"Lost: {reason}", f"%{name}%")
+            "WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s)",
+            (f"Lost: {reason}", tenant_id, f"%{name}%")
         )
     client.post_message(f"Deal lost: {name} -- reason: {reason}")
 
 
-def cmd_set_commitment(client, text: str, sender: str):
+def cmd_set_commitment(client, text: str, sender: str, tenant_id: str):
     raw = text.split(":", 1)[1].strip() if ":" in text else text
     with db_cursor() as cur:
         cur.execute(
             """
-            INSERT INTO commitments (lead_name, commitment_text, detected_by, source_message, party)
-            VALUES (%s, %s, 'manual', %s, 'customer') RETURNING id
+            INSERT INTO commitments (tenant_id, lead_name, commitment_text, detected_by, source_message, party)
+            VALUES (%s, %s, %s, 'manual', %s, 'customer') RETURNING id
             """,
-            (None, raw, text)
+            (tenant_id, None, raw, text)
         )
         cid = cur.fetchone()["id"]
     client.post_message(
@@ -184,15 +227,36 @@ def cmd_set_commitment(client, text: str, sender: str):
     )
 
 
-def cmd_stale_leads(client, sender: str):
+def cmd_set_commitment_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ConversationService after wizard collects all fields."""
+    from app.Services.ValidationService import validate_date
+    deadline, _ = validate_date(data["deadline"])
+    text_summary = f"{data['person']} will {data['action']} by {deadline}"
+
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO commitments (tenant_id, lead_name, commitment_text, deadline, detected_by, source_message, party)
+            VALUES (%s, %s, %s, %s, 'manual', %s, 'customer') RETURNING id
+            """,
+            (tenant_id, data["person"], text_summary, deadline, text_summary)
+        )
+        cid = cur.fetchone()["id"]
+    client.post_message(
+        f"Commitment tracked (#{cid})\n{text_summary}\n_Tracked by @{sender}_"
+    )
+
+
+def cmd_stale_leads(client, sender: str, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
             """
             SELECT name, stage, deal_value, last_touched_at
             FROM leads
-            WHERE last_touched_at < NOW() - INTERVAL '7 days'
+            WHERE tenant_id = %s AND last_touched_at < NOW() - INTERVAL '7 days'
             ORDER BY deal_value DESC
-            """
+            """,
+            (tenant_id,)
         )
         rows = cur.fetchall()
     if not rows:
@@ -205,20 +269,20 @@ def cmd_stale_leads(client, sender: str):
     client.post_message("\n".join(lines))
 
 
-def cmd_lead_card(client, text: str, sender: str):
+def cmd_lead_card(client, text: str, sender: str, tenant_id: str):
     name = text.split(":", 1)[1].strip() if ":" in text else ""
     with db_cursor() as cur:
         cur.execute(
-            "SELECT * FROM leads WHERE LOWER(name) LIKE LOWER(%s) LIMIT 1",
-            (f"%{name}%",)
+            "SELECT * FROM leads WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
+            (tenant_id, f"%{name}%")
         )
         lead = cur.fetchone()
         commits = []
         if lead:
             cur.execute(
-                "SELECT * FROM commitments WHERE LOWER(lead_name) LIKE LOWER(%s) "
+                "SELECT * FROM commitments WHERE tenant_id = %s AND LOWER(lead_name) LIKE LOWER(%s) "
                 "ORDER BY created_at DESC LIMIT 3",
-                (f"%{name}%",)
+                (tenant_id, f"%{name}%")
             )
             commits = cur.fetchall()
     if not lead:

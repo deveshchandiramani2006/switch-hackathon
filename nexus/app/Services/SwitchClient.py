@@ -15,15 +15,17 @@ SWITCH_URL = os.getenv("SWITCH_SERVER_URL", "http://localhost:8080")
 
 
 class SwitchClient:
-    def __init__(self, agent_name: str, api_key: str, agent_id: str, room_id: str):
+    def __init__(self, agent_name: str, api_key: str, agent_id: str,
+                 room_id: str, tenant_id: str = "default"):
         self.agent_name = agent_name
-        self.api_key = api_key
-        self.agent_id = agent_id
-        self.room_id = room_id
-        self.conn_id = str(uuid.uuid4())
-        self.ws = None
-        self.cursor = 0
-        self._on_message_cb = None
+        self.api_key    = api_key
+        self.agent_id   = agent_id
+        self.room_id    = room_id
+        self.tenant_id  = tenant_id
+        self.conn_id    = str(uuid.uuid4())
+        self.ws         = None
+        self.cursor     = 0
+        self._on_message_cb  = None
         self._reconnect_delay = 1
 
     @staticmethod

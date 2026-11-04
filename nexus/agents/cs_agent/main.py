@@ -19,9 +19,10 @@ from .scheduler import start_cs_scheduler
 
 
 def main():
-    agent_id = os.getenv("SWITCH_AGENT_ID", "")
-    api_key  = os.getenv("SWITCH_API_KEY", "")
-    room_id  = os.getenv("SWITCH_ROOM_ID", "")
+    agent_id  = os.getenv("SWITCH_AGENT_ID", "")
+    api_key   = os.getenv("SWITCH_API_KEY", "")
+    room_id   = os.getenv("SWITCH_ROOM_ID", "")
+    tenant_id = os.getenv("TENANT_ID", "default")
 
     if not all([agent_id, api_key, room_id]):
         logger.error("SWITCH_AGENT_ID, SWITCH_API_KEY, SWITCH_ROOM_ID must all be set.")
@@ -31,7 +32,8 @@ def main():
         agent_name="CSAgent",
         api_key=api_key,
         agent_id=agent_id,
-        room_id=room_id
+        room_id=room_id,
+        tenant_id=tenant_id,
     )
 
     start_cs_scheduler(client)

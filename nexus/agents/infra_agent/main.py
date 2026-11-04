@@ -27,7 +27,8 @@ def main():
         logger.error("SWITCH env vars not set.")
         sys.exit(1)
 
-    client = SwitchClient("InfraAgent", api_key, agent_id, room_id)
+    tenant_id = os.getenv("TENANT_ID", "default")
+    client = SwitchClient("InfraAgent", api_key, agent_id, room_id, tenant_id=tenant_id)
     start_monitor(client)
     client.connect(handle_message, addressing_mode="anyone")
 

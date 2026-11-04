@@ -9,28 +9,26 @@ from app.Services.ApprovalsService import check_approval_expirations
 
 logger = logging.getLogger(__name__)
 
-TENANT_ID = "default"
-
 
 def start_blog_scheduler(client):
     scheduler = BackgroundScheduler()
 
     scheduler.add_job(
-        lambda: post_morning_digest(client, "BlogAgent", TENANT_ID),
+        lambda: post_morning_digest(client, "BlogAgent", client.tenant_id),
         "cron",
         hour=9,
         minute=0,
         id="blog_morning_digest"
     )
     scheduler.add_job(
-        lambda: run_proactive_check(client, "BlogAgent", TENANT_ID),
+        lambda: run_proactive_check(client, "BlogAgent", client.tenant_id),
         "interval",
         hours=6,
         id="blog_proactive"
     )
     # Check approval expirations every hour
     scheduler.add_job(
-        lambda: check_approval_expirations(client, "BlogAgent", TENANT_ID),
+        lambda: check_approval_expirations(client, "BlogAgent", client.tenant_id),
         "interval",
         hours=1,
         id="blog_approval_expirations"

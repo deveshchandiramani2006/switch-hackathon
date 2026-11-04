@@ -27,11 +27,13 @@ def main():
         logger.error("SWITCH_AGENT_ID, SWITCH_API_KEY, SWITCH_ROOM_ID must all be set.")
         sys.exit(1)
 
+    tenant_id = os.getenv("TENANT_ID", "default")
     client = SwitchClient(
         agent_name="FinanceAgent",
         api_key=api_key,
         agent_id=agent_id,
-        room_id=room_id
+        room_id=room_id,
+        tenant_id=tenant_id,
     )
 
     start_finance_scheduler(client)
