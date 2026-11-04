@@ -3,18 +3,16 @@
 ## Day 1 — Nov 4, 2026
 
 ### Infrastructure
-- [x] Project structure created
-- [x] Docker Compose with PostgreSQL + Ollama profile
-- [x] PostgreSQL schema (7 tables)
-- [x] switch_setup.py — registers all 5 agents, writes keys to .env
-- [x] health_check.py — verifies all services before launch
-- [x] db_init.py — idempotent schema init
+- [x] Project structure created (Laravel-inspired: app/, routes/, bootstrap/, database/, docker/)
+- [x] Docker Compose with PostgreSQL + 7 agents + management API + voice server
+- [x] PostgreSQL schema (25+ tables across 3 migration files)
+- [x] `artisan.py` — CLI for migrations, agent registration, seeding, config migration
 
-### Shared Modules
-- [x] shared/switch_client.py — WebSocket client with ping/pong, auto-reconnect, post_message, send_targeted_message, list_agents, safe_signal
-- [x] shared/llm.py — Anthropic (cloud) and Ollama (local) backends
-- [x] shared/db.py — psycopg2 context manager
-- [x] shared/config.py — env + YAML config
+### Shared Services
+- [x] `app/Services/SwitchClient.py` — WebSocket client with ping/pong, auto-reconnect, post_message, send_targeted_message, list_agents, safe_signal, record_heartbeat, read_context
+- [x] `app/Services/LlmService.py` — Anthropic / OpenAI / Ollama backends + retry + circuit breaker
+- [x] `app/Services/DatabaseService.py` — psycopg2 context manager
+- [x] `config/app.py` — env-based config
 
 ### SalesAgent
 - [x] Passive commitment detection via Claude
@@ -48,7 +46,7 @@
 - [x] Commands: draft, queue, preview
 
 ### Demo Data
-- [x] seed_demo_data.py with 3 leads, overdue commitment, keywords, services
+- [x] `database/seeders/DemoSeeder.py` — 3 leads, overdue commitment, keywords, monitored services (`python artisan.py seed`)
 
 ### Documentation
 - [x] SETUP.md — full setup guide
@@ -132,10 +130,16 @@
 ### P3: Cross-Agent Entity Search
 - [x] `GET /api/v1/tenants/{id}/search?q=Acme` — single query across leads, customers, bugs, invoices, content_queue; returns unified JSON result
 
-### Planned
-- [ ] Voice integration (Whisper) for sales room
-- [ ] Live demo rehearsal
-- [ ] Video demo recording
+### P3: Voice Integration (Whisper)
+- [x] `VoiceService.py` — Whisper transcription (lazy-load model), keyword-based agent routing, DB logging to `voice_transcriptions`
+- [x] `VoiceController.py` — `/health`, `/transcribe`, `/voice-command` endpoints
+- [x] `/voice-command` posts transcribed message directly to Switch room via `_post_to_switch` (uses `SWITCH_AGENT_ID_VOICE` / `SWITCH_API_KEY_VOICE`)
+- [x] Auto-detects target agent from transcript keywords; falls back gracefully if voice credentials not set
+- [x] Voice server runs as separate Docker service on port 5001 (`docker/Dockerfile.voice`)
+
+### Documentation
+- [x] `docs/SETUP.md` — full rewrite: artisan.py workflow, all env vars, Switch room setup, troubleshooting, demo mode shortcuts
+- [x] `.env.example` — updated with all current vars (Stripe, SMTP, SendGrid, voice agent, TENANT_ID, billing mock flags)
 
 ## Day 2 (Continued) — SaaS Foundation
 

@@ -1,6 +1,8 @@
 import os
+import uuid
 import tempfile
 import logging
+import requests
 from flask import request, jsonify
 
 from app.Services.VoiceService import (
@@ -8,6 +10,8 @@ from app.Services.VoiceService import (
 )
 
 logger = logging.getLogger(__name__)
+
+SWITCH_URL = os.getenv("SWITCH_SERVER_URL", "http://localhost:8080")
 
 AGENT_DISPLAY_MAP = {
     "sales":   "SalesAgent",
@@ -18,6 +22,44 @@ AGENT_DISPLAY_MAP = {
     "cs":      "CSAgent",
     "finance": "FinanceAgent",
 }
+
+AGENT_ROOM_ENV = {
+    "sales":   "SWITCH_ROOM_ID_SALES",
+    "support": "SWITCH_ROOM_ID_SUPPORT",
+    "geo_seo": "SWITCH_ROOM_ID_GROWTH",
+    "blog":    "SWITCH_ROOM_ID_CONTENT",
+    "infra":   "SWITCH_ROOM_ID_DEVOPS",
+    "cs":      "SWITCH_ROOM_ID_CS",
+    "finance": "SWITCH_ROOM_ID_FINANCE",
+}
+
+
+def _post_to_switch(agent_key: str, room_id: str, text: str):
+    """Post transcribed voice command to Switch room if voice agent credentials are set."""
+    agent_id = os.getenv("SWITCH_AGENT_ID_VOICE")
+    api_key  = os.getenv("SWITCH_API_KEY_VOICE")
+    if not agent_id or not api_key:
+        logger.info("SWITCH_AGENT_ID_VOICE / SWITCH_API_KEY_VOICE not set — skipping Switch post")
+        return False
+    target_room = room_id or os.getenv(AGENT_ROOM_ENV.get(agent_key, "SWITCH_ROOM_ID_SALES"), "")
+    if not target_room:
+        logger.warning(f"No room ID for agent '{agent_key}' — cannot post to Switch")
+        return False
+    try:
+        requests.post(
+            f"{SWITCH_URL}/agents/{agent_id}/ops/post_message",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "X-Switch-Connection-Id": str(uuid.uuid4()),
+            },
+            json={"room_id": target_room, "text": text},
+            timeout=10,
+        )
+        logger.info(f"Voice command posted to Switch room {target_room}: {text[:80]}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to post voice command to Switch: {e}")
+        return False
 
 
 def health():
@@ -105,10 +147,13 @@ def voice_command():
 
     save_transcription(agent, transcript, audio_file.filename, tenant_id)
 
+    posted = _post_to_switch(agent, room_id, switch_message)
+
     return jsonify({
         "text":           transcript,
         "agent":          agent,
         "switch_message": switch_message,
         "room_id":        room_id,
-        "tenant_id":      tenant_id
+        "tenant_id":      tenant_id,
+        "posted_to_switch": posted,
     })
