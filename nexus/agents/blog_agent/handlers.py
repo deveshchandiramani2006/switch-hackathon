@@ -57,6 +57,9 @@ def handle_message(client, payload: dict):
         return
 
     t = clean.lower().strip()
+    from app.Services.UsageAnalyticsService import UsageAnalyticsService
+    _cmd_key = t.split(":")[0].strip()[:50]
+    UsageAnalyticsService.log(tenant_id, "BlogAgent", _cmd_key, sender)
     if t == "draft":
         # Bare "draft" with no topic → start wizard
         ConversationService.start(tenant_id, room_id, sender, "BlogAgent", "draft_post", client)
@@ -100,6 +103,10 @@ def handle_message(client, payload: dict):
 
 def _handle_approve_cmd(client, text: str, sender: str, tenant_id: str):
     """approve #42 or approve #42 -- edit: change CTA"""
+    from app.Services.UserIdentityService import UserIdentityService
+    if not UserIdentityService.has_role(tenant_id, sender, "manager"):
+        UserIdentityService.deny(client, "approve invoices")
+        return
     parts = text.strip().split("--", 1)
     id_part = parts[0].replace("approve", "").strip().lstrip("#")
     edit_instruction = None
@@ -155,6 +162,9 @@ def approve_draft_by_id(client, draft_id: int, sender: str, tenant_id: str, with
     # Apply edits if requested
     if with_edits:
         client.post_message(f"Applying edit: _{with_edits}_...")
+        from app.Services.FeatureGateService import FeatureGateService
+        if not FeatureGateService.gate_llm(tenant_id, client):
+            return
         new_body = llm.complete(
             f"Apply this edit to the blog post:\nEdit instruction: {with_edits}\n\nOriginal:\n{draft['draft_content']}\n\nReturn the full updated post body only."
         )
@@ -243,6 +253,9 @@ def handle_brief(client, text: str, tenant_id: str = "default"):
         f"Generating draft..."
     )
 
+    from app.Services.FeatureGateService import FeatureGateService
+    if not FeatureGateService.gate_llm(tenant_id, client):
+        return
     draft_text = llm.complete(
         DRAFT_PROMPT.format(keyword=keyword, geo=geo, reason=reason)
     )

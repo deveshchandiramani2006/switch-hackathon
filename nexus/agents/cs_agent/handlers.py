@@ -50,6 +50,9 @@ def handle_message(client, payload: dict):
 
 def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     t = text.lower().strip()
+    from app.Services.UsageAnalyticsService import UsageAnalyticsService
+    _cmd_key = t.split(":")[0].strip()[:50]
+    UsageAnalyticsService.log(tenant_id, "CSAgent", _cmd_key, sender)
 
     if t == "add customer":
         from app.Services import ConversationService
@@ -302,6 +305,9 @@ def _cmd_expansion(client, name: str, tenant_id: str):
         f"Recent events: {', '.join([e['event_type'] for e in events[:5]])}\n\n"
         f"Give 2-3 concrete expansion opportunities for this customer. Be specific. 3-4 bullet points."
     )
+    from app.Services.FeatureGateService import FeatureGateService
+    if not FeatureGateService.gate_llm(tenant_id, client):
+        return
     suggestions = llm.complete(prompt)
     client.post_message(
         f"*Expansion signals for {cust['name']}:*\n"
@@ -333,6 +339,9 @@ def _cmd_qbr(client, name: str, tenant_id: str):
         f"Create a 5-point QBR agenda with time estimates. Focus on value delivery and renewal. "
         f"Format as a numbered list."
     )
+    from app.Services.FeatureGateService import FeatureGateService
+    if not FeatureGateService.gate_llm(tenant_id, client):
+        return
     agenda = llm.complete(prompt)
     client.post_message(f"*QBR Agenda for {cust['name']}:*\n\n{agenda}")
 

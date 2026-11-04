@@ -44,6 +44,9 @@ def handle_message(client, payload: dict):
 
 def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     t = text.lower().strip()
+    from app.Services.UsageAnalyticsService import UsageAnalyticsService
+    _cmd_key = t.split(":")[0].strip()[:50]
+    UsageAnalyticsService.log(tenant_id, "SalesAgent", _cmd_key, sender)
     from app.Services import ConversationService
 
     if t in ("new lead", "new lead:"):

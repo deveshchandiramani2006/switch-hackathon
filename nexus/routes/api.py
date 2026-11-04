@@ -15,6 +15,8 @@ from app.Http.Controllers.ManagementController import (
     get_analytics,
     get_onboarding_status,
     set_user_role, list_users,
+    # Operations hardening
+    get_agent_liveness, get_audit_log, purge_tenant,
 )
 
 api_bp = Blueprint("api", __name__)
@@ -63,6 +65,15 @@ api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/onboarding", view_func=require_
 # ── User management ───────────────────────────────────────────────────────────
 api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/users",                 view_func=require_master_key(list_users),    methods=["GET"])
 api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/users/<username>/role", view_func=require_master_key(set_user_role), methods=["PATCH"])
+
+# ── Agent liveness ────────────────────────────────────────────────────────────
+api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/agents/status", view_func=require_master_key(get_agent_liveness), methods=["GET"])
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/audit-log", view_func=require_master_key(get_audit_log), methods=["GET"])
+
+# ── GDPR purge ────────────────────────────────────────────────────────────────
+api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/purge", view_func=require_master_key(purge_tenant), methods=["DELETE"])
 
 # ── Health ────────────────────────────────────────────────────────────────────
 api_bp.add_url_rule("/api/v1/health", view_func=health_check, methods=["GET"])

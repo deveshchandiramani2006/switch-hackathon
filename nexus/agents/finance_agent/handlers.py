@@ -44,6 +44,9 @@ def handle_message(client, payload: dict):
 
 def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     t = text.lower().strip()
+    from app.Services.UsageAnalyticsService import UsageAnalyticsService
+    _cmd_key = t.split(":")[0].strip()[:50]
+    UsageAnalyticsService.log(tenant_id, "FinanceAgent", _cmd_key, sender)
 
     if t == "invoice" or t == "invoice:":
         from app.Services import ConversationService
@@ -169,6 +172,10 @@ def _cmd_list_invoices(client, tenant_id: str):
 
 
 def _cmd_approve_invoice(client, text: str, sender: str, tenant_id: str):
+    from app.Services.UserIdentityService import UserIdentityService
+    if not UserIdentityService.has_role(tenant_id, sender, "manager"):
+        UserIdentityService.deny(client, "approve invoices")
+        return
     ref    = text.split(":", 1)[1].strip()
     inv_id = ref.replace("invoice-", "").strip()
     with db_cursor() as cur:
@@ -192,6 +199,10 @@ def _cmd_approve_invoice(client, text: str, sender: str, tenant_id: str):
 
 
 def _cmd_reject_invoice(client, text: str, sender: str, tenant_id: str):
+    from app.Services.UserIdentityService import UserIdentityService
+    if not UserIdentityService.has_role(tenant_id, sender, "manager"):
+        UserIdentityService.deny(client, "approve invoices")
+        return
     raw    = text.split(":", 1)[1].strip()
     parts  = raw.split(",", 1)
     ref    = parts[0].strip()

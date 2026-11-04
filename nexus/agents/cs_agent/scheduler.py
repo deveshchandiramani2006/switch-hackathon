@@ -48,6 +48,13 @@ def start_cs_scheduler(client):
         id="cs_proactive"
     )
 
+    scheduler.add_job(
+        lambda: client.record_heartbeat(),
+        "interval",
+        minutes=5,
+        id="cs_heartbeat"
+    )
+
     scheduler.start()
     logger.info("CSAgent scheduler started")
     return scheduler

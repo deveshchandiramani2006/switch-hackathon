@@ -112,6 +112,22 @@ class SwitchClient:
             logger.error(f"list_agents failed: {e}")
             return []
 
+    def record_heartbeat(self):
+        """Upsert agent liveness into agent_heartbeats for management API monitoring."""
+        try:
+            from app.Services.DatabaseService import db_cursor
+            with db_cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO agent_heartbeats (tenant_id, agent_name, last_seen)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (tenant_id, agent_name) DO UPDATE SET last_seen = NOW()
+                    """,
+                    (self.tenant_id, self.agent_name)
+                )
+        except Exception as e:
+            logger.warning(f"record_heartbeat failed: {e}")
+
     def safe_signal(self, target_name: str, message: str):
         """Send targeted message only if target agent is deployed."""
         agents = self.list_agents()

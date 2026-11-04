@@ -70,26 +70,52 @@ class LLMClient:
             _DEFAULT_PROVIDER_BY_AGENT["default"]
         )
 
-    def complete(self, prompt: str, json_mode: bool = False, system: str = None) -> str:
-        """Route to correct provider, fall back on failure."""
-        try:
-            return self._dispatch(self.provider, self.model, prompt, json_mode, system)
-        except Exception as e:
-            logger.warning(f"LLM primary provider '{self.provider}' failed: {e}")
-            if self.fallback_provider:
+    def complete(self, prompt: str, json_mode: bool = False, system: str = None,
+                tenant_id: str = None, client=None) -> str:
+        """Route to correct provider with retry, feature gating, and fallback."""
+        import time
+
+        # Feature gate check — blocks if tenant hit daily LLM limit
+        if tenant_id and client:
+            from app.Services.FeatureGateService import FeatureGateService
+            if not FeatureGateService.gate_llm(tenant_id, client):
+                raise RuntimeError("LLM daily limit reached for this tenant")
+
+        # Primary provider with exponential backoff (3 attempts: 1s, 2s, 4s)
+        last_exc = None
+        for attempt in range(3):
+            try:
+                return self._dispatch(self.provider, self.model, prompt, json_mode, system)
+            except Exception as e:
+                last_exc = e
+                if attempt < 2:
+                    wait = 2 ** attempt  # 1s then 2s
+                    logger.warning(f"LLM attempt {attempt + 1} failed ({e}), retrying in {wait}s")
+                    time.sleep(wait)
+
+        logger.warning(f"LLM primary provider '{self.provider}' failed after 3 attempts: {last_exc}")
+
+        # Configured fallback provider
+        if self.fallback_provider:
+            for attempt in range(2):
                 try:
                     return self._dispatch(
                         self.fallback_provider, self.fallback_model,
                         prompt, json_mode, system
                     )
-                except Exception as e2:
-                    logger.error(f"LLM fallback provider '{self.fallback_provider}' also failed: {e2}")
-            if self.provider != "ollama":
-                try:
-                    return self._ollama(prompt)
-                except Exception:
-                    pass
-            raise
+                except Exception as e:
+                    if attempt == 0:
+                        time.sleep(1)
+                    logger.error(f"LLM fallback provider '{self.fallback_provider}' attempt {attempt + 1} failed: {e}")
+
+        # Last resort: local Ollama
+        if self.provider != "ollama":
+            try:
+                return self._ollama(prompt)
+            except Exception as e:
+                logger.error(f"Ollama last-resort also failed: {e}")
+
+        raise last_exc
 
     def _dispatch(self, provider: str, model: str, prompt: str, json_mode: bool, system: str) -> str:
         if provider == "anthropic":

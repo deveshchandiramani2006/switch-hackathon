@@ -34,6 +34,13 @@ def start_blog_scheduler(client):
         id="blog_approval_expirations"
     )
 
+    scheduler.add_job(
+        lambda: client.record_heartbeat(),
+        "interval",
+        minutes=5,
+        id="blog_heartbeat"
+    )
+
     scheduler.start()
     logger.info("BlogAgent scheduler started")
     return scheduler

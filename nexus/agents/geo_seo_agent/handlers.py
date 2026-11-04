@@ -34,6 +34,9 @@ def handle_message(client, payload: dict):
         return
 
     t = clean.lower().strip()
+    from app.Services.UsageAnalyticsService import UsageAnalyticsService
+    _cmd_key = t.split(":")[0].strip()[:50]
+    UsageAnalyticsService.log(tenant_id, "GeoSEOAgent", _cmd_key, sender)
     if "run now" in t:
         client.post_message("Running analysis cycle now...")
         run_analysis_cycle(client, tenant_id)

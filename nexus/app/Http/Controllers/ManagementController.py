@@ -11,6 +11,37 @@ from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 
+AUDIT_TABLES = [
+    "leads", "commitments", "escalation_log", "content_queue", "keyword_tracking",
+    "monitored_services", "bugs", "customers", "customer_events", "invoices",
+    "expenses", "budgets", "agent_memory", "agent_patterns", "approval_requests",
+    "approval_sessions", "conversation_sessions", "usage_events", "onboarding_sessions",
+    "voice_transcriptions", "tenant_users", "tenant_configs", "agent_heartbeats",
+    "audit_log",
+]
+
+
+def _write_audit(tenant_id: str, actor: str, action: str,
+                 target_type: str = None, target_id: str = None,
+                 before_val: dict = None, after_val: dict = None):
+    """Write an immutable audit entry. Swallows DB errors to never break the main path."""
+    try:
+        import json
+        with db_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO audit_log (tenant_id, actor, action, target_type, target_id, before_val, after_val)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    tenant_id, actor, action, target_type, str(target_id) if target_id else None,
+                    json.dumps(before_val) if before_val else None,
+                    json.dumps(after_val)  if after_val  else None,
+                )
+            )
+    except Exception as e:
+        logger.warning(f"audit log write failed: {e}")
+
 
 def create_tenant():
     body   = request.get_json(force=True) or {}
@@ -109,9 +140,11 @@ def delete_tenant(tenant_id):
     if not tenant_exists(tenant_id):
         return jsonify({"error": "Tenant not found"}), 404
 
+    actor = request.headers.get("X-Actor", "api")
     with db_cursor() as cur:
         cur.execute("UPDATE tenants SET status='deleted' WHERE tenant_id=%s", (tenant_id,))
 
+    _write_audit(tenant_id, actor, "tenant_deleted", "tenant", tenant_id)
     logger.info(f"Tenant soft-deleted: {tenant_id}")
     return jsonify({"tenant_id": tenant_id, "status": "deleted"})
 
@@ -248,6 +281,8 @@ def rotate_webhook_secret(tenant_id):
     new_secret = secrets.token_hex(32)
     with db_cursor() as cur:
         cur.execute("UPDATE tenants SET webhook_secret=%s WHERE tenant_id=%s", (new_secret, tenant_id))
+    actor = request.headers.get("X-Actor", "api")
+    _write_audit(tenant_id, actor, "secret_rotated", "tenant", tenant_id)
     logger.info(f"Webhook secret rotated for tenant {tenant_id}")
     return jsonify({"tenant_id": tenant_id, "webhook_secret": new_secret})
 
@@ -271,9 +306,14 @@ def update_tenant_config(tenant_id):
     if not updates:
         return jsonify({"error": f"No valid fields. Allowed: {', '.join(allowed)}"}), 400
     from app.Models.TenantConfig import TenantConfig
+    old_cfg = TenantConfig.get(tenant_id)
     ok = TenantConfig.save(tenant_id, **updates)
     if not ok:
         return jsonify({"error": "Config update failed"}), 500
+    actor = request.headers.get("X-Actor", "api")
+    _write_audit(tenant_id, actor, "config_updated", "tenant", tenant_id,
+                 before_val={k: old_cfg.get(k) for k in updates},
+                 after_val=updates)
     return jsonify({"tenant_id": tenant_id, "status": "updated", "updated_fields": list(updates.keys())})
 
 
@@ -322,7 +362,86 @@ def set_user_role(tenant_id, username):
     if err:
         return jsonify({"error": err}), 400
     from app.Services.UserIdentityService import UserIdentityService
+    old_role = UserIdentityService.get_role(tenant_id, username)
     ok = UserIdentityService.set_role(tenant_id, username, role)
     if not ok:
         return jsonify({"error": "Failed to set role"}), 500
+    actor = request.headers.get("X-Actor", "api")
+    _write_audit(tenant_id, actor, "role_changed", "user", username,
+                 before_val={"role": old_role}, after_val={"role": role})
     return jsonify({"tenant_id": tenant_id, "username": username, "role": role})
+
+
+# ── Agent liveness ────────────────────────────────────────────────────────────
+
+def get_agent_liveness(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT agent_name, last_seen,
+                   EXTRACT(EPOCH FROM (NOW() - last_seen)) AS seconds_ago
+            FROM agent_heartbeats
+            WHERE tenant_id = %s
+            ORDER BY agent_name
+            """,
+            (tenant_id,)
+        )
+        rows = cur.fetchall()
+
+    agents = []
+    for r in rows:
+        seconds_ago = int(r["seconds_ago"] or 0)
+        status = "alive" if seconds_ago < 600 else ("stale" if seconds_ago < 1800 else "dead")
+        agents.append({
+            "agent":       r["agent_name"],
+            "last_seen":   str(r["last_seen"]),
+            "seconds_ago": seconds_ago,
+            "status":      status,
+        })
+
+    return jsonify({"tenant_id": tenant_id, "agents": agents})
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+def get_audit_log(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    limit = min(int(request.args.get("limit", "50")), 200)
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            SELECT actor, action, target_type, target_id, before_val, after_val, created_at
+            FROM audit_log
+            WHERE tenant_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (tenant_id, limit)
+        )
+        rows = cur.fetchall()
+    return jsonify({"tenant_id": tenant_id, "entries": [dict(r) for r in rows]})
+
+
+# ── GDPR hard delete ──────────────────────────────────────────────────────────
+
+def purge_tenant(tenant_id):
+    """Hard delete — wipes ALL data for the tenant then removes the tenant row."""
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+
+    actor = request.headers.get("X-Actor", "api")
+    _write_audit(tenant_id, actor, "tenant_purged", "tenant", tenant_id)
+
+    with db_cursor() as cur:
+        for table in AUDIT_TABLES:
+            try:
+                cur.execute(f"DELETE FROM {table} WHERE tenant_id = %s", (tenant_id,))
+            except Exception as e:
+                logger.warning(f"purge_tenant: could not delete from {table}: {e}")
+        cur.execute("DELETE FROM tenants WHERE tenant_id = %s", (tenant_id,))
+
+    logger.info(f"Tenant hard-deleted (GDPR purge): {tenant_id}")
+    return jsonify({"tenant_id": tenant_id, "status": "purged"})

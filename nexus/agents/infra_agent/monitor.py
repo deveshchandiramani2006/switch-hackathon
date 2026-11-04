@@ -87,6 +87,13 @@ def start_monitor(client):
         id="infra_proactive"
     )
 
+    scheduler.add_job(
+        lambda: client.record_heartbeat(),
+        "interval",
+        minutes=5,
+        id="infra_heartbeat"
+    )
+
     scheduler.start()
     logger.info("Infra monitor running every 5 min")
     return scheduler

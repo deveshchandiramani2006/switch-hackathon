@@ -45,20 +45,20 @@ For shared-infra deployments (future), `TenantResolver` maps `workspace_id` or S
 
 ```
 app/Services/
-├── SwitchClient.py         — WebSocket client (now carries tenant_id)
-├── TenantResolver.py       — Resolves tenant from env var / workspace / room
-├── ConversationService.py  — Stateful modal wizard for multi-field commands
-├── ValidationService.py    — Field-level validators with helpful error messages
-├── UserIdentityService.py  — Sender → TenantUser with role hierarchy
-├── FeatureGateService.py   — Subscription tier enforcement + LLM usage tracking
-├── UsageAnalyticsService.py — Command execution logging, 90-day analytics
-├── OnboardingService.py    — 4-step setup wizard for new tenants
-├── LlmService.py           — Anthropic / Ollama backends
-├── DatabaseService.py      — psycopg2 context manager
-├── MemoryService.py        — Agent event log + pattern extraction
-├── ApprovalsService.py     — Approval request lifecycle
-├── DigestService.py        — Morning digest generator
-└── ProactiveService.py     — Unprompted intelligence signals
+├── SwitchClient.py          — WebSocket client (tenant_id, record_heartbeat())
+├── TenantResolver.py        — Resolves tenant from env var / workspace / room
+├── ConversationService.py   — Stateful modal wizard for multi-field commands
+├── ValidationService.py     — Field-level validators with helpful error messages
+├── UserIdentityService.py   — Sender → TenantUser with role hierarchy (enforced in handlers)
+├── FeatureGateService.py    — Subscription tier enforcement (called before all LLM ops)
+├── UsageAnalyticsService.py — Command execution logging (called in all route_command fns)
+├── OnboardingService.py     — 4-step setup wizard for new tenants
+├── LlmService.py            — Multi-provider LLM router, 3-attempt retry + backoff
+├── DatabaseService.py       — psycopg2 context manager
+├── MemoryService.py         — Agent event log + pattern extraction
+├── ApprovalsService.py      — Approval request lifecycle
+├── DigestService.py         — Morning digest generator
+└── ProactiveService.py      — Unprompted intelligence signals
 
 app/Models/
 ├── Tenant.py               — Tenant CRUD helpers
@@ -197,13 +197,23 @@ All endpoints require `Authorization: Bearer <MASTER_KEY>` unless noted.
 | GET | `/api/v1/tenants/{id}/analytics?period=7d` | Usage analytics |
 | GET | `/api/v1/tenants/{id}/onboarding` | Onboarding step status |
 | GET | `/api/v1/tenants/{id}/users` | List tenant users |
-| PATCH | `/api/v1/tenants/{id}/users/{username}/role` | Set user role |
+| PATCH | `/api/v1/tenants/{id}/users/{username}/role` | Set user role (audit-logged) |
+| GET | `/api/v1/tenants/{id}/agents/status` | Live agent heartbeat status |
+| GET | `/api/v1/tenants/{id}/audit-log` | Immutable audit trail |
+| DELETE | `/api/v1/tenants/{id}/purge` | GDPR hard delete — wipes all tenant data |
 | GET | `/api/v1/health` | Health check (no auth) |
 
 **Webhook signing:**
 ```
 X-Nexus-Signature: sha256=<hmac-sha256(webhook_secret, raw_body)>
 ```
+
+**Audit-logged operations:** tenant delete, config update, role change, webhook secret rotation, GDPR purge. Pass `X-Actor: <username>` header to attribute changes.
+
+**Agent liveness statuses:**
+- `alive` — heartbeat within last 10 min
+- `stale` — 10–30 min since last heartbeat
+- `dead` — 30+ min since last heartbeat
 
 ---
 
@@ -218,6 +228,8 @@ X-Nexus-Signature: sha256=<hmac-sha256(webhook_secret, raw_body)>
 
 LLM calls tracked in `tenants.llm_calls_today`, reset daily at midnight.
 Over-limit message links to upgrade page.
+
+**Enforcement:** `FeatureGateService.gate_llm()` is called before every LLM operation in all agents. Exceeding the limit posts an in-channel upgrade message and blocks the call.
 
 ---
 
@@ -261,6 +273,8 @@ Auto-created as `member` on first interaction. Elevated via API or by admin.
 | `usage_events` | Command execution analytics (90-day rolling) |
 | `onboarding_sessions` | New-tenant setup wizard progress |
 | `voice_transcriptions` | Voice command transcripts |
+| `agent_heartbeats` | Per-agent liveness pings (every 5 min) |
+| `audit_log` | Immutable record of config/role/key changes |
 | `schema_migrations` | Applied migration tracking |
 
 ---

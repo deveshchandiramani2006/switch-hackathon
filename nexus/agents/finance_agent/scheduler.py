@@ -48,6 +48,13 @@ def start_finance_scheduler(client):
         id="finance_proactive"
     )
 
+    scheduler.add_job(
+        lambda: client.record_heartbeat(),
+        "interval",
+        minutes=5,
+        id="finance_heartbeat"
+    )
+
     scheduler.start()
     logger.info("FinanceAgent scheduler started")
     return scheduler

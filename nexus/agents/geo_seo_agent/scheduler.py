@@ -34,6 +34,13 @@ def start_geo_scheduler(client):
         id="geoseo_proactive"
     )
 
+    scheduler.add_job(
+        lambda: client.record_heartbeat(),
+        "interval",
+        minutes=5,
+        id="geoseo_heartbeat"
+    )
+
     scheduler.start()
     logger.info(f"GeoSEO scheduler running every {hours}h")
     return scheduler

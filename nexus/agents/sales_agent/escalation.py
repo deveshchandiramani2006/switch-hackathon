@@ -114,6 +114,13 @@ def start_escalation_scheduler(client):
         id="sales_proactive"
     )
 
+    scheduler.add_job(
+        lambda: client.record_heartbeat(),
+        "interval",
+        minutes=5,
+        id="sales_heartbeat"
+    )
+
     scheduler.start()
     logger.info(f"Escalation scheduler running every {interval} min")
     return scheduler

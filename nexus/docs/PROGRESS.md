@@ -56,9 +56,43 @@
 - [x] AGENTS.md — command reference for all agents
 - [x] README.md — quickstart
 
-## Day 3 — Nov 6, 2026 (planned)
+## Day 3 — Nov 6, 2026
+
+### P0: Wire Dead Services (All Three Now Active)
+- [x] `FeatureGateService.gate_llm()` wired into all LLM-calling handler functions across 5 agents (SupportAgent triage, CSAgent expansion/QBR, BlogAgent draft generation + edit approval)
+- [x] `UserIdentityService.has_role()` enforced: FinanceAgent `approve`/`reject` require `manager+`; BlogAgent `approve #N` requires `manager+`
+- [x] `UsageAnalyticsService.log()` called at top of `route_command` in all 7 agent handlers — every command is now logged to `usage_events`
+
+### P0: LLM Reliability
+- [x] `LlmService.complete()` — 3-attempt exponential backoff (1s, 2s) on primary provider before falling back; then configured fallback provider (2 attempts); then Ollama as last resort
+- [x] Feature gate integrated directly into `complete()` via optional `tenant_id`/`client` params
+
+### P1: SLA Breach Alerts
+- [x] `SupportAgent` scheduler — `_check_sla_breaches()` runs every 30 min
+- [x] Reads SLA thresholds from `TenantConfig` (p0_hours=2, p1_hours=8 defaults)
+- [x] Posts in-channel alert for P0/P1 bugs exceeding SLA, marks `sla_breach_notified=TRUE` to prevent spam
+
+### P1: Agent Liveness Monitoring
+- [x] `SwitchClient.record_heartbeat()` — upserts into `agent_heartbeats` table
+- [x] All 7 agent schedulers call `record_heartbeat()` every 5 min
+- [x] `GET /api/v1/tenants/{id}/agents/status` — returns alive/stale/dead status per agent (stale > 10 min, dead > 30 min)
+
+### P2: Audit Log
+- [x] `audit_log` table in migration 003 — actor, action, target, before/after JSONB
+- [x] Management API writes audit entries on: tenant delete, config update, role change, webhook secret rotation, GDPR purge
+- [x] `GET /api/v1/tenants/{id}/audit-log?limit=50` — returns recent entries
+- [x] Pass `X-Actor: <username>` header to attribute API calls to a human
+
+### P2: GDPR Hard Delete
+- [x] `DELETE /api/v1/tenants/{id}/purge` — wipes all data across 23 tables, then removes tenant row
+- [x] Writes final audit entry before purging (preserved since audit_log is deleted last)
+- [x] Soft delete (`DELETE /api/v1/tenants/{id}`) still available for recoverable removals
+
+### Infrastructure
+- [x] Migration `003_operations_hardening.sql` — `agent_heartbeats`, `audit_log`, `sla_breach_notified` column on bugs, `auto_resolved`/`resolved_text` on commitments
+
+### Planned
 - [ ] Voice integration (Whisper) for sales room
-- [ ] PR contributions to Switch core
 - [ ] Live demo rehearsal
 - [ ] Video demo recording
 
@@ -145,7 +179,7 @@
 
 ## Demo Checklist
 - [ ] Switch server running
-- [ ] All 6 agents connected (check logs), each with TENANT_ID env var set
+- [ ] All 7 agents connected (check logs), each with TENANT_ID env var set
 - [ ] Demo data seeded (`python artisan.py seed`)
 - [ ] Multi-tenancy: `TENANT_ID` env var verified per container
 - [ ] Sales: `@SalesAgent new lead` → wizard starts (5 prompts)
@@ -153,8 +187,13 @@
 - [ ] Sales: escalation fires (ESCALATION_CHECK_MINUTES=1 for demo)
 - [ ] CS: `@CSAgent add customer` → wizard
 - [ ] Finance: `@FinanceAgent invoice` → wizard
+- [ ] Finance: `@FinanceAgent approve: invoice-001` as non-manager → role denied
 - [ ] Growth: `@GeoSEOAgent run now` → briefs to blog
-- [ ] Content: `approve #N` → publish
+- [ ] Content: `approve #N` → publish (manager role required)
 - [ ] DevOps: `@InfraAgent add` → wizard, then status
 - [ ] Webhook: test with HMAC signature
-- [ ] Analytics: `GET /api/v1/tenants/default/analytics`
+- [ ] Analytics: `GET /api/v1/tenants/default/analytics` → shows real command counts
+- [ ] Liveness: `GET /api/v1/tenants/default/agents/status` → all 7 alive
+- [ ] Audit log: `GET /api/v1/tenants/default/audit-log`
+- [ ] LLM gate: set plan=free in DB, trigger 101st LLM call → upgrade message appears
+- [ ] SLA: file a P0 bug, wait 2h (or set p0_hours=0 for demo) → breach alert fires

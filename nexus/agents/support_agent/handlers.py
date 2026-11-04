@@ -56,6 +56,9 @@ def handle_message(client, payload: dict):
 
 def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     t = text.lower().strip()
+    from app.Services.UsageAnalyticsService import UsageAnalyticsService
+    _cmd_key = t.split(":")[0].strip()[:50]
+    UsageAnalyticsService.log(tenant_id, "SupportAgent", _cmd_key, sender)
     if t.startswith("bug:"):
         triage_bug(client, text.split(":", 1)[1].strip(), sender, tenant_id)
     elif t.startswith("status"):
@@ -121,6 +124,9 @@ def _cmd_knowledge(client, query: str, tenant_id: str):
 
 
 def triage_bug(client, description: str, sender: str, tenant_id: str):
+    from app.Services.FeatureGateService import FeatureGateService
+    if not FeatureGateService.gate_llm(tenant_id, client):
+        return
     try:
         result = llm.complete(SEVERITY_PROMPT.format(report=description), json_mode=True)
         data = json.loads(result)
