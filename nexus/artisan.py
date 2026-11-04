@@ -3,12 +3,14 @@
 NEXUS Artisan — project CLI tool.
 
 Usage:
-  python artisan.py migrate        Run database migrations
-  python artisan.py seed           Seed demo data
-  python artisan.py agents:setup   Register agents with Switch
-  python artisan.py health:check   System health check
-  python artisan.py serve:api      Start management API (dev)
-  python artisan.py serve:voice    Start voice server (dev)
+  python artisan.py migrate                           Run database migrations
+  python artisan.py seed                              Seed demo data
+  python artisan.py agents:setup                      Register agents with Switch
+  python artisan.py health:check                      System health check
+  python artisan.py serve:api                         Start management API (dev)
+  python artisan.py serve:voice                       Start voice server (dev)
+  python artisan.py migrate-config [tenant] [yaml]    Migrate company.yaml → DB for tenant
+  python artisan.py ensure-tenant-config [tenant]     Create default config row if missing
 """
 import sys
 import os
@@ -156,13 +158,37 @@ def _serve_voice():
     create_app().run(host="0.0.0.0", port=port, debug=False)
 
 
+def _migrate_config():
+    # Usage: python artisan.py migrate-config [tenant_id] [yaml_path]
+    args  = sys.argv[2:]
+    t_id  = args[0] if len(args) > 0 else "default"
+    ypath = args[1] if len(args) > 1 else "config/company.yaml"
+    from app.Models.TenantConfig import TenantConfig
+    ok = TenantConfig.from_yaml(t_id, ypath)
+    if ok:
+        print(f"Config migrated for tenant '{t_id}' from {ypath}")
+    else:
+        print(f"Migration failed. Check the YAML path and DB connection.")
+        sys.exit(1)
+
+
+def _ensure_tenant_config():
+    args = sys.argv[2:]
+    t_id = args[0] if len(args) > 0 else "default"
+    from app.Models.TenantConfig import TenantConfig
+    TenantConfig.ensure_exists(t_id)
+    print(f"Tenant config ensured for '{t_id}'")
+
+
 COMMANDS = {
-    "migrate":       _migrate,
-    "seed":          _seed,
-    "agents:setup":  _agents_setup,
-    "health:check":  _health_check,
-    "serve:api":     _serve_api,
-    "serve:voice":   _serve_voice,
+    "migrate":               _migrate,
+    "seed":                  _seed,
+    "agents:setup":          _agents_setup,
+    "health:check":          _health_check,
+    "serve:api":             _serve_api,
+    "serve:voice":           _serve_voice,
+    "migrate-config":        _migrate_config,
+    "ensure-tenant-config":  _ensure_tenant_config,
 }
 
 if __name__ == "__main__":
