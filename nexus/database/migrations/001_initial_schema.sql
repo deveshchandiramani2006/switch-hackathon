@@ -1,10 +1,4 @@
-import os
-import psycopg2
-from dotenv import load_dotenv
 
-load_dotenv()
-
-SCHEMA = """
 -- ── Tenants ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tenants (
     id          SERIAL PRIMARY KEY,
@@ -317,14 +311,4 @@ BEGIN
     END IF;
 END
 $$;
-"""
 
-if __name__ == "__main__":
-    db_url = os.getenv("DATABASE_URL", "postgresql://nexus:nexus_dev@localhost:5432/nexus")
-    conn = psycopg2.connect(db_url)
-    cur = conn.cursor()
-    cur.execute(SCHEMA)
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("PostgreSQL schema initialized (multi-tenant)")

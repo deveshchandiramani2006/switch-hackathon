@@ -142,7 +142,7 @@ services:
   voice_server:
     build:
       context: .
-      dockerfile: Dockerfile.voice
+      dockerfile: docker/Dockerfile.voice
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
@@ -158,7 +158,7 @@ services:
   management_api:
     build:
       context: .
-      dockerfile: Dockerfile.mgmt
+      dockerfile: docker/Dockerfile.mgmt
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus

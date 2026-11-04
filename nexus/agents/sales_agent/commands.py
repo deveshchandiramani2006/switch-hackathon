@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
-from shared.db import db_cursor
-from shared.llm import LLMClient
+from app.Services.DatabaseService import db_cursor
+from app.Services.LlmService import LLMClient
 
 logger = logging.getLogger(__name__)
 llm = LLMClient(agent="sales")

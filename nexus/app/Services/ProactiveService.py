@@ -4,8 +4,8 @@ Called by each agent's scheduler every 6 hours (configurable).
 """
 import os
 import logging
-from datetime import datetime, timedelta
-from shared.db import db_cursor
+from datetime import datetime
+from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,6 @@ def run_proactive_check(client, agent_name: str, tenant_id: str = "default"):
 def _sales_proactive(client, tenant_id: str):
     silence_days = int(os.getenv("DEAL_SILENCE_ALERT_DAYS", "7"))
 
-    # Check leads silent too long
     with db_cursor() as cur:
         cur.execute(
             """
@@ -57,7 +56,6 @@ def _sales_proactive(client, tenant_id: str):
             lines.append(f"- {r['name']} | {_fmt_v(r['deal_value'])} | {days}d silent")
         client.post_message("\n".join(lines))
 
-    # Check loss pattern — 3+ losses with same reason in 7 days
     with db_cursor() as cur:
         cur.execute(
             """
@@ -81,7 +79,6 @@ def _sales_proactive(client, tenant_id: str):
 
 
 def _support_proactive(client, tenant_id: str):
-    # Recurring error pattern — same error 3+ times in 24h
     with db_cursor() as cur:
         cur.execute(
             """
@@ -103,7 +100,6 @@ def _support_proactive(client, tenant_id: str):
                 f"This is a systematic issue — recommend root-cause investigation."
             )
 
-    # Customer filing 3x normal volume
     with db_cursor() as cur:
         cur.execute(
             """
@@ -129,7 +125,6 @@ def _support_proactive(client, tenant_id: str):
 
 
 def _geoseo_proactive(client, tenant_id: str):
-    # Check rank drops > threshold
     rank_drop_threshold = int(os.getenv("RANK_DROP_THRESHOLD", "5"))
     with db_cursor() as cur:
         cur.execute(
@@ -154,7 +149,6 @@ def _geoseo_proactive(client, tenant_id: str):
         lines.append("Consider refreshing content for these keywords.")
         client.post_message("\n".join(lines))
 
-    # Content gap — keywords tracked with no published URL
     with db_cursor() as cur:
         cur.execute(
             """
@@ -174,7 +168,6 @@ def _geoseo_proactive(client, tenant_id: str):
 
 
 def _blog_proactive(client, tenant_id: str):
-    # Posts approaching 90-day refresh window (simulated via content_queue published_at)
     with db_cursor() as cur:
         cur.execute(
             """
@@ -196,7 +189,6 @@ def _blog_proactive(client, tenant_id: str):
             lines.append(f"- {p['keyword']}: published {days}d ago — consider refreshing")
         client.post_message("\n".join(lines))
 
-    # Drafts sitting in queue > 48h without approval
     with db_cursor() as cur:
         cur.execute(
             """
@@ -219,7 +211,6 @@ def _blog_proactive(client, tenant_id: str):
 
 
 def _cs_proactive(client, tenant_id: str):
-    # Health score drops — customers who scored GREEN/YELLOW before and are now RED
     with db_cursor() as cur:
         cur.execute(
             """
@@ -240,7 +231,6 @@ def _cs_proactive(client, tenant_id: str):
             lines.append(f"- {c['name']}: score {c['health_score']} | CSM: {csm}")
         client.post_message("\n".join(lines))
 
-    # Expansion signals — customers with high health and upcoming renewal
     with db_cursor() as cur:
         cur.execute(
             """
@@ -266,14 +256,9 @@ def _cs_proactive(client, tenant_id: str):
 def _finance_proactive(client, tenant_id: str):
     budget_warn_pct = int(os.getenv("BUDGET_WARN_PCT", "75"))
 
-    # Budgets > threshold with days remaining
     with db_cursor() as cur:
         cur.execute(
-            """
-            SELECT name, allocated, spent, period
-            FROM budgets
-            WHERE tenant_id=%s AND allocated > 0
-            """,
+            "SELECT name, allocated, spent, period FROM budgets WHERE tenant_id=%s AND allocated > 0",
             (tenant_id,)
         )
         budgets = cur.fetchall()
@@ -287,7 +272,6 @@ def _finance_proactive(client, tenant_id: str):
     if warnings:
         client.post_message("*Budget alert — high burn rate:*\n" + "\n".join(warnings))
 
-    # Invoices due in 3 days
     with db_cursor() as cur:
         cur.execute(
             """

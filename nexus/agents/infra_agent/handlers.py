@@ -1,6 +1,6 @@
 import logging
 import requests as req
-from shared.db import db_cursor
+from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 

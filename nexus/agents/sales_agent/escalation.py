@@ -2,11 +2,11 @@ import os
 import logging
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-from shared.db import db_cursor
-from shared.llm import LLMClient
-from shared.config import Config
-from shared.digest import post_morning_digest
-from shared.proactive import run_proactive_check
+from app.Services.DatabaseService import db_cursor
+from app.Services.LlmService import LLMClient
+from config.app import Config
+from app.Services.DigestService import post_morning_digest
+from app.Services.ProactiveService import run_proactive_check
 
 logger = logging.getLogger(__name__)
 llm = LLMClient(agent="sales")

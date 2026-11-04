@@ -21,7 +21,6 @@ PROVIDERS = {
     "ollama":    {"local": True,                "models": ["mistral", "llama3.2", "phi3", "qwen2.5"]},
 }
 
-# Env-based defaults (backward-compatible with original llm.py)
 CLOUD_AGENTS = {"sales", "support", "geo_seo"}
 
 _DEFAULT_PROVIDER_BY_AGENT = {
@@ -43,12 +42,10 @@ class LLMClient:
         self.agent = agent
         self.tenant_config = tenant_config or {}
 
-        # Resolve provider + model from: tenant_config > per-agent env > global env
         provider, model = self._resolve_provider_model()
         self.provider = provider
         self.model = model
 
-        # Fallback provider
         fallback_cfg = self.tenant_config.get("llm", {}).get("formatter", {}).get("fallback", {})
         self.fallback_provider = fallback_cfg.get("provider", None)
         self.fallback_model    = fallback_cfg.get("model", None)
@@ -57,7 +54,6 @@ class LLMClient:
         """Priority: tenant_config[agents][X] > tenant_config[agents][default] > env defaults."""
         tc_llm = self.tenant_config.get("llm", {})
         agent_key = self.agent + "_agent" if not self.agent.endswith("_agent") else self.agent
-        # Try exact agent key, then strip _agent, then default
         agent_cfg = (
             tc_llm.get("agents", {}).get(agent_key)
             or tc_llm.get("agents", {}).get(self.agent)
@@ -69,13 +65,10 @@ class LLMClient:
             model    = agent_cfg.get("model", PROVIDERS.get(provider, {}).get("models", [""])[0])
             return provider, model
 
-        # Fall back to env-based defaults
         return _DEFAULT_PROVIDER_BY_AGENT.get(
             self.agent,
             _DEFAULT_PROVIDER_BY_AGENT["default"]
         )
-
-    # ── Public interface ───────────────────────────────────────────────────────
 
     def complete(self, prompt: str, json_mode: bool = False, system: str = None) -> str:
         """Route to correct provider, fall back on failure."""
@@ -91,7 +84,6 @@ class LLMClient:
                     )
                 except Exception as e2:
                     logger.error(f"LLM fallback provider '{self.fallback_provider}' also failed: {e2}")
-            # Last resort — try ollama locally
             if self.provider != "ollama":
                 try:
                     return self._ollama(prompt)
@@ -116,8 +108,6 @@ class LLMClient:
             return self._ollama(prompt, model)
         else:
             raise ValueError(f"Unknown provider: {provider}")
-
-    # ── Provider implementations ───────────────────────────────────────────────
 
     def _anthropic(self, prompt: str, json_mode: bool, system: str, model: str = None) -> str:
         import anthropic

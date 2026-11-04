@@ -2,8 +2,8 @@ import os
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from .analysis import run_analysis_cycle
-from shared.digest import post_morning_digest
-from shared.proactive import run_proactive_check
+from app.Services.DigestService import post_morning_digest
+from app.Services.ProactiveService import run_proactive_check
 
 logger = logging.getLogger(__name__)
 

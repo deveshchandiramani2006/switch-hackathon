@@ -78,7 +78,7 @@ def route_command(client, text: str, sender: str):
 
 def _handle_geo_signal(client, text: str):
     """GEO_SIGNAL: keyword=X geo=Y volume=Z trend=T"""
-    from shared.db import db_cursor
+    from app.Services.DatabaseService import db_cursor
     parts = {}
     for p in text.replace("GEO_SIGNAL:", "").strip().split():
         if "=" in p:
@@ -111,7 +111,7 @@ def _handle_geo_signal(client, text: str):
 
 
 def _cmd_patterns(client):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SalesAgent")
     patterns = mem.get_patterns(min_occurrences=2)
     if not patterns:
@@ -124,7 +124,7 @@ def _cmd_patterns(client):
 
 
 def _cmd_memory(client):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SalesAgent")
     events = mem.search_knowledge("")
     if not events:
@@ -137,7 +137,7 @@ def _cmd_memory(client):
 
 
 def _cmd_knowledge(client, query: str):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SalesAgent")
     results = mem.search_knowledge(query)
     if not results:

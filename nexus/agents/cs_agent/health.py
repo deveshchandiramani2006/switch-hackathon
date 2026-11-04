@@ -4,7 +4,7 @@ Score = NPS(30%) + support_volume(25%) + renewal_proximity(20%) + engagement(25%
 """
 import logging
 from datetime import datetime, timedelta
-from shared.db import db_cursor
+from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 

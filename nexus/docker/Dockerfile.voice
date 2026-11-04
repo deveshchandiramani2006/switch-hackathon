@@ -4,9 +4,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY shared/ ./shared/
-COPY voice_server.py ./nexus/voice_server.py
-COPY company_config.yaml .
+COPY app/ ./app/
+COPY config/ ./config/
+COPY routes/ ./routes/
+COPY bootstrap/ ./bootstrap/
 ENV PYTHONPATH=/app
 EXPOSE 5001
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5001", "--timeout", "120", "nexus.voice_server:app"]
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5001", "--timeout", "120", "bootstrap.voice:app"]

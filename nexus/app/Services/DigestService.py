@@ -3,8 +3,8 @@ Daily 9 AM Digest — each agent posts a morning summary to its room.
 Called by each agent's scheduler at 9 AM.
 """
 import logging
-from datetime import datetime, timedelta
-from shared.db import db_cursor
+from datetime import datetime
+from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def _geoseo_digest(client, tenant_id: str):
             "SELECT COUNT(*) AS cnt FROM content_queue WHERE tenant_id=%s AND status='draft_ready'",
             (tenant_id,)
         )
-        awaiting   = cur.fetchone()["cnt"]
+        awaiting = cur.fetchone()["cnt"]
         cur.execute(
             "SELECT keyword, current_rank FROM keyword_tracking WHERE tenant_id=%s ORDER BY current_rank NULLS LAST LIMIT 1",
             (tenant_id,)

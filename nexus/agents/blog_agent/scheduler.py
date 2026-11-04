@@ -3,9 +3,9 @@ BlogAgent scheduler — digest + proactive checks + approval expiration checks.
 """
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from shared.digest import post_morning_digest
-from shared.proactive import run_proactive_check
-from shared.approvals import check_approval_expirations
+from app.Services.DigestService import post_morning_digest
+from app.Services.ProactiveService import run_proactive_check
+from app.Services.ApprovalsService import check_approval_expirations
 
 logger = logging.getLogger(__name__)
 

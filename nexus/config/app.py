@@ -54,9 +54,11 @@ class Config:
     GEO_SEO_INTERVAL_HOURS = int(os.getenv("GEO_SEO_INTERVAL_HOURS", "24"))
 
     @staticmethod
-    def load_yaml():
+    def load_yaml(path=None):
+        if path is None:
+            path = os.path.join(os.path.dirname(__file__), "company.yaml")
         try:
-            with open("company_config.yaml") as f:
+            with open(path) as f:
                 return yaml.safe_load(f)
         except FileNotFoundError:
             return {}

@@ -1,6 +1,6 @@
 import logging
 from .analysis import run_analysis_cycle
-from shared.db import db_cursor
+from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 

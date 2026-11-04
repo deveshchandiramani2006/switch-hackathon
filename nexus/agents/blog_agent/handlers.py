@@ -1,7 +1,7 @@
 import logging
-from shared.db import db_cursor
-from shared.llm import LLMClient
-from shared.approvals import ApprovalRequest, check_approval_expirations
+from app.Services.DatabaseService import db_cursor
+from app.Services.LlmService import LLMClient
+from app.Services.ApprovalsService import ApprovalRequest, check_approval_expirations
 from .publisher import publish_post
 
 logger = logging.getLogger(__name__)
@@ -254,7 +254,7 @@ def show_queue(client):
 
 
 def _cmd_patterns(client):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("BlogAgent")
     patterns = mem.get_patterns(min_occurrences=2)
     if not patterns:
@@ -267,7 +267,7 @@ def _cmd_patterns(client):
 
 
 def _cmd_memory(client):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("BlogAgent")
     events = mem.search_knowledge("")
     if not events:
@@ -280,7 +280,7 @@ def _cmd_memory(client):
 
 
 def _cmd_knowledge(client, query: str):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("BlogAgent")
     results = mem.search_knowledge(query)
     if not results:

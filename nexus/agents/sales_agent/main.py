@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 sys.path.insert(0, "/app")
 
-from shared.switch_client import SwitchClient
+from app.Services.SwitchClient import SwitchClient
 from .handlers import handle_message
 from .escalation import start_escalation_scheduler
 

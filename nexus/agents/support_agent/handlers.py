@@ -1,8 +1,8 @@
 import json
 import logging
 import requests as req
-from shared.db import db_cursor
-from shared.llm import LLMClient
+from app.Services.DatabaseService import db_cursor
+from app.Services.LlmService import LLMClient
 
 logger = logging.getLogger(__name__)
 llm = LLMClient(agent="support")
@@ -72,7 +72,7 @@ def route_command(client, text: str, sender: str):
 
 
 def _cmd_patterns(client):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SupportAgent")
     patterns = mem.get_patterns(min_occurrences=2)
     if not patterns:
@@ -85,7 +85,7 @@ def _cmd_patterns(client):
 
 
 def _cmd_memory(client):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SupportAgent")
     events = mem.search_knowledge("")
     if not events:
@@ -98,7 +98,7 @@ def _cmd_memory(client):
 
 
 def _cmd_knowledge(client, query: str):
-    from shared.memory import AgentMemory
+    from app.Services.MemoryService import AgentMemory
     mem = AgentMemory("SupportAgent")
     results = mem.search_knowledge(query)
     if not results:

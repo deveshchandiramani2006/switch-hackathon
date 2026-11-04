@@ -3,8 +3,8 @@ SupportAgent scheduler — digest + proactive checks.
 """
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from shared.digest import post_morning_digest
-from shared.proactive import run_proactive_check
+from app.Services.DigestService import post_morning_digest
+from app.Services.ProactiveService import run_proactive_check
 
 logger = logging.getLogger(__name__)
 

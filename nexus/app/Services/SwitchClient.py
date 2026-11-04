@@ -132,14 +132,11 @@ class SwitchClient:
         def on_message(ws, raw):
             try:
                 msg = json.loads(raw)
-                # Handle ping
                 if msg.get("type") == "ping":
                     ws.send(json.dumps({"type": "pong", "cursor": self.cursor}))
                     return
-                # Update cursor
                 if "cursor" in msg:
                     self.cursor = msg["cursor"]
-                # Only process addressed messages
                 payload = msg.get("payload", {})
                 if payload.get("addressed") and self._on_message_cb:
                     self._on_message_cb(self, payload)

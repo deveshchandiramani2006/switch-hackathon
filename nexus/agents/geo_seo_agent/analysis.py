@@ -2,7 +2,7 @@ import os
 import logging
 import requests
 import yaml
-from shared.db import db_cursor
+from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 

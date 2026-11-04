@@ -3,7 +3,7 @@ CS Agent escalation — RED health customers notified to CSM, then CS Lead after
 """
 import logging
 from datetime import datetime, timedelta
-from shared.db import db_cursor
+from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 

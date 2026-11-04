@@ -5,7 +5,7 @@ All agents call AgentMemory(agent, tenant_id) to remember outcomes and extract p
 import json
 import logging
 from collections import Counter
-from shared.db import db_cursor
+from app.Services.DatabaseService import db_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class AgentMemory:
     def extract_patterns(self):
         """
         Group recent events by event_type and outcome, detect repetition.
-        Called periodically by scheduler. Increments pattern occurrences when repeated.
+        Called periodically by scheduler.
         """
         try:
             with db_cursor() as cur:
@@ -78,7 +78,6 @@ class AgentMemory:
             if not events:
                 return
 
-            # Group by (event_type, outcome) to find repetition
             pairs = Counter()
             for ev in events:
                 key = (ev["event_type"], str(ev["outcome"] or ""))
@@ -99,7 +98,6 @@ class AgentMemory:
                         """,
                         (self.tenant_id, self.agent, event_type, description, count, confidence)
                     )
-                    # Also try to update if exists (simple upsert by description)
                     cur.execute(
                         """
                         UPDATE agent_patterns

@@ -3,8 +3,8 @@ FinanceAgent scheduler — daily digest, 3-day invoice reminders, weekly report.
 """
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from shared.digest import post_morning_digest
-from shared.proactive import run_proactive_check
+from app.Services.DigestService import post_morning_digest
+from app.Services.ProactiveService import run_proactive_check
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def start_finance_scheduler(client):
 
 
 def _invoice_reminders(client):
-    from shared.db import db_cursor
+    from app.Services.DatabaseService import db_cursor
     try:
         with db_cursor() as cur:
             cur.execute(
