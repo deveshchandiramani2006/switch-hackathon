@@ -4,10 +4,38 @@ CSAgent scheduler — daily digest, weekly report, at-risk sweep, proactive chec
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from .escalation import run_health_escalations
+from app.Services.DatabaseService import db_cursor
 from app.Services.DigestService import post_morning_digest
 from app.Services.ProactiveService import run_proactive_check
 
 logger = logging.getLogger(__name__)
+
+
+def _health_decay_check(client):
+    """Gradually reduce health score for disengaged customers."""
+    tenant_id = client.tenant_id
+    try:
+        with db_cursor() as cur:
+            cur.execute(
+                """
+                UPDATE customers
+                SET health_score = GREATEST(health_score - 5, 10)
+                WHERE tenant_id = %s
+                  AND status = 'active'
+                  AND id NOT IN (
+                      SELECT DISTINCT customer_id FROM customer_events
+                      WHERE tenant_id = %s
+                        AND created_at > NOW() - INTERVAL '14 days'
+                  )
+                  AND health_score > 10
+                """,
+                (tenant_id, tenant_id)
+            )
+            decayed = cur.rowcount
+        if decayed:
+            logger.info(f"Health decay: {decayed} customers reduced (tenant={tenant_id})")
+    except Exception as e:
+        logger.error(f"Health decay check failed: {e}")
 
 
 def start_cs_scheduler(client):
@@ -53,6 +81,14 @@ def start_cs_scheduler(client):
         "interval",
         minutes=5,
         id="cs_heartbeat"
+    )
+
+    scheduler.add_job(
+        lambda: _health_decay_check(client),
+        "cron",
+        hour=2,
+        minute=0,
+        id="cs_health_decay"
     )
 
     scheduler.start()

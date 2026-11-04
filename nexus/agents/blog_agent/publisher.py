@@ -54,7 +54,11 @@ def publish_post(draft: dict) -> str | None:
         )
         resp.raise_for_status()
         data = resp.json()
-        return data.get("url") or data.get("link") or data.get("permalink") or endpoint
+        url = data.get("url") or data.get("link") or data.get("permalink")
+        if not url:
+            logger.error(f"Blog publish: response had no url/link/permalink field. Response keys: {list(data.keys())}")
+            return None
+        return url
     except Exception as e:
         logger.error(f"Blog publish failed: {e}")
         return None

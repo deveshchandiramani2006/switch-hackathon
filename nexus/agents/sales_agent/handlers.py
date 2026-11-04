@@ -1,5 +1,5 @@
 import logging
-from .commitment import detect_commitment
+from .commitment import detect_commitment, detect_resolution
 from .commands import (
     cmd_new_lead, cmd_pipeline, cmd_follow_up,
     cmd_format, cmd_won, cmd_lost,
@@ -40,6 +40,7 @@ def handle_message(client, payload: dict):
         if ConversationService.resume(tenant_id, room_id, sender, "SalesAgent", text, client):
             return
         detect_commitment(client, text, sender, tenant_id)
+        detect_resolution(client, text, sender, tenant_id)
 
 
 def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):

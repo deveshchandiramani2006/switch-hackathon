@@ -67,7 +67,20 @@ def check_and_escalate(client):
             f"Write only the Slack message text."
         )
 
+        level_idx = current  # 0-based index into levels
         client.post_message(f"{target} {msg}")
+
+        # Email fallback for Level 3+
+        if level_idx >= 2:
+            email = levels[level_idx].get("email", "")
+            if email:
+                from app.Services.EmailService import EmailService
+                lead_name = c["lead_name"] or "Unknown"
+                EmailService.send(
+                    to=email,
+                    subject=f"[NEXUS Escalation L{level_idx+1}] {lead_name} commitment overdue",
+                    body=msg
+                )
 
         with db_cursor() as cur:
             cur.execute(

@@ -445,3 +445,106 @@ def purge_tenant(tenant_id):
 
     logger.info(f"Tenant hard-deleted (GDPR purge): {tenant_id}")
     return jsonify({"tenant_id": tenant_id, "status": "purged"})
+
+
+# ── Billing ───────────────────────────────────────────────────────────────────
+
+def get_billing_info(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    from app.Services.BillingService import BillingService
+    return jsonify({"tenant_id": tenant_id, **BillingService.get_plan_info(tenant_id)})
+
+
+def create_checkout(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    body  = request.get_json(force=True) or {}
+    plan  = body.get("plan", "").strip()
+    email = body.get("email", "")
+    if not plan:
+        return jsonify({"error": "plan is required"}), 400
+    from app.Services.BillingService import BillingService
+    result = BillingService.create_checkout_session(tenant_id, plan, customer_email=email)
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify({"tenant_id": tenant_id, **result})
+
+
+def billing_webhook():
+    from app.Services.BillingService import BillingService
+    result = BillingService.handle_webhook(
+        request.get_data(),
+        request.headers.get("Stripe-Signature", "")
+    )
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+def update_plan(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    body = request.get_json(force=True) or {}
+    plan = body.get("plan", "").strip()
+    if not plan:
+        return jsonify({"error": "plan is required"}), 400
+    from app.Services.BillingService import BillingService
+    ok = BillingService.update_plan(tenant_id, plan)
+    if not ok:
+        return jsonify({"error": f"Invalid plan: {plan}"}), 400
+    actor = request.headers.get("X-Actor", "api")
+    _write_audit(tenant_id, actor, "plan_updated", "tenant", tenant_id, after_val={"plan": plan})
+    return jsonify({"tenant_id": tenant_id, "plan": plan})
+
+
+# ── Cross-agent entity search ─────────────────────────────────────────────────
+
+def search_entities(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    q = request.args.get("q", "").strip()
+    if not q or len(q) < 2:
+        return jsonify({"error": "q must be at least 2 characters"}), 400
+
+    pattern = f"%{q}%"
+    results = {}
+
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT id, name, stage, deal_value, city FROM leads "
+            "WHERE tenant_id=%s AND name ILIKE %s LIMIT 5",
+            (tenant_id, pattern)
+        )
+        results["leads"] = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            "SELECT id, name, health_score, arr, assigned_csm FROM customers "
+            "WHERE tenant_id=%s AND name ILIKE %s AND status='active' LIMIT 5",
+            (tenant_id, pattern)
+        )
+        results["customers"] = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            "SELECT id, severity, description, status FROM bugs "
+            "WHERE tenant_id=%s AND (description ILIKE %s OR customer ILIKE %s) LIMIT 5",
+            (tenant_id, pattern, pattern)
+        )
+        results["bugs"] = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            "SELECT id, vendor, amount, status, due_date FROM invoices "
+            "WHERE tenant_id=%s AND vendor ILIKE %s LIMIT 5",
+            (tenant_id, pattern)
+        )
+        results["invoices"] = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            "SELECT id, keyword, status FROM content_queue "
+            "WHERE tenant_id=%s AND (keyword ILIKE %s OR title ILIKE %s) LIMIT 5",
+            (tenant_id, pattern, pattern)
+        )
+        results["content"] = [dict(r) for r in cur.fetchall()]
+
+    total = sum(len(v) for v in results.values())
+    return jsonify({"tenant_id": tenant_id, "query": q, "total": total, "results": results})

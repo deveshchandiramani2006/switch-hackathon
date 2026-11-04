@@ -138,6 +138,25 @@ class SwitchClient:
         else:
             logger.info(f"{target_name} not deployed — skipping signal")
 
+    def read_context(self, room_id: str = None, limit: int = 10) -> list:
+        """Fetch recent messages from a Switch room for LLM context."""
+        try:
+            resp = requests.get(
+                f"{SWITCH_URL}/agents/{self.agent_id}/ops/read_context",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "X-Switch-Connection-Id": self.conn_id
+                },
+                params={"room_id": room_id or self.room_id, "limit": limit},
+                timeout=10
+            )
+            if resp.ok:
+                return resp.json().get("messages", [])
+            return []
+        except Exception as e:
+            logger.warning(f"read_context failed: {e}")
+            return []
+
     def connect(self, on_message_callback, addressing_mode: str = "owner_and_owner_agents"):
         """Start WebSocket connection with auto-reconnect."""
         self._on_message_cb = on_message_callback

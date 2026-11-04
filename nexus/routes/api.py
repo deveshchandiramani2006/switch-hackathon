@@ -17,6 +17,10 @@ from app.Http.Controllers.ManagementController import (
     set_user_role, list_users,
     # Operations hardening
     get_agent_liveness, get_audit_log, purge_tenant,
+    # Billing
+    get_billing_info, create_checkout, billing_webhook, update_plan,
+    # Cross-agent search
+    search_entities,
 )
 
 api_bp = Blueprint("api", __name__)
@@ -74,6 +78,15 @@ api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/audit-log", view_func=require_m
 
 # ── GDPR purge ────────────────────────────────────────────────────────────────
 api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/purge", view_func=require_master_key(purge_tenant), methods=["DELETE"])
+
+# ── Billing ───────────────────────────────────────────────────────────────────
+api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/billing",          view_func=require_master_key(get_billing_info), methods=["GET"])
+api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/billing/checkout", view_func=require_master_key(create_checkout),  methods=["POST"])
+api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/billing/plan",     view_func=require_master_key(update_plan),      methods=["PATCH"])
+api_bp.add_url_rule("/api/v1/billing/webhook",                      view_func=billing_webhook,                      methods=["POST"])
+
+# ── Cross-agent search ────────────────────────────────────────────────────────
+api_bp.add_url_rule("/api/v1/tenants/<tenant_id>/search", view_func=require_master_key(search_entities), methods=["GET"])
 
 # ── Health ────────────────────────────────────────────────────────────────────
 api_bp.add_url_rule("/api/v1/health", view_func=health_check, methods=["GET"])

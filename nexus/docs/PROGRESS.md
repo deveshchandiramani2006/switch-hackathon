@@ -91,6 +91,47 @@
 ### Infrastructure
 - [x] Migration `003_operations_hardening.sql` — `agent_heartbeats`, `audit_log`, `sla_breach_notified` column on bugs, `auto_resolved`/`resolved_text` on commitments
 
+## Day 3 (Continued) — Operations Hardening Round 2
+
+### P0: Config + Integration Fixes
+- [x] InfraAgent monitor reads threshold and on-call chain from `TenantConfig`, not `company_config.yaml` — last YAML holdout eliminated
+- [x] `publisher.py` — no longer returns the API endpoint URL as a fake published URL; logs error and returns `None` if response has no `url`/`link`/`permalink` key
+
+### P1: Circuit Breaker
+- [x] `LlmService._dispatch()` wrapped with `_CircuitBreaker` (5-failure threshold, 120s recovery). CLOSED → OPEN → HALF_OPEN state machine, per-provider, in-memory singleton
+- [x] Combined with existing retry (3 attempts + backoff): retry handles transient errors, circuit breaker handles sustained outages
+
+### P1: Room Context for LLM
+- [x] `SwitchClient.read_context(room_id, limit)` — fetches recent room messages via Switch REST API
+- [x] `commitment.py` — loads last 5 room messages as context block before passing message to LLM, improving commitment detection accuracy in multi-turn threads
+
+### P1: Commitment Auto-Resolve
+- [x] `detect_resolution(client, message, user, tenant_id)` — LLM classifies passive "done" language (sent, submitted, shared, completed)
+- [x] On match: finds most recent pending commitment for that user, marks `status=kept`, `auto_resolved=TRUE`, posts in-channel confirmation
+- [x] Wired into `sales_agent/handlers.py` passive scan alongside `detect_commitment`
+
+### P2: CS Health Score Decay
+- [x] `_health_decay_check` in `cs_agent/scheduler.py` — runs daily at 02:00
+- [x] Reduces `health_score` by 5 (floor 10) for active customers with no `customer_events` in last 14 days
+- [x] Prevents stale customers from forever holding an inflated score
+
+### P2: Email Fallback for Escalations
+- [x] `app/Services/EmailService.py` — SMTP + SendGrid transports, graceful no-op when unconfigured
+- [x] `sales_agent/escalation.py` — sends email for escalation Level 3+ if `email` key present in level config
+
+### P2: Management API Rate Limiting
+- [x] `auth.py` — `require_master_key_with_rate_limit`: token bucket, 120 req/min per API key, returns 429 JSON on breach
+
+### P3: Billing Integration
+- [x] `app/Services/BillingService.py` — Stripe checkout session creation, webhook handler (payment → plan update, failure → downgrade to free), mock mode via `BILLING_MOCK_MODE=true`
+- [x] `GET /api/v1/tenants/{id}/billing` — plan info + upgrade options
+- [x] `POST /api/v1/tenants/{id}/billing/checkout` — create Stripe checkout session
+- [x] `PATCH /api/v1/tenants/{id}/billing/plan` — admin override (audit-logged)
+- [x] `POST /api/v1/billing/webhook` — Stripe webhook (unauthenticated, Stripe-signed)
+
+### P3: Cross-Agent Entity Search
+- [x] `GET /api/v1/tenants/{id}/search?q=Acme` — single query across leads, customers, bugs, invoices, content_queue; returns unified JSON result
+
 ### Planned
 - [ ] Voice integration (Whisper) for sales room
 - [ ] Live demo rehearsal

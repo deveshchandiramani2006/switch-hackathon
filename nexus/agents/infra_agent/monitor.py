@@ -1,7 +1,6 @@
 import os
 import logging
 import requests
-import yaml
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.Services.DatabaseService import db_cursor
@@ -19,10 +18,11 @@ def check_services(client):
         services = cur.fetchall()
 
     try:
-        with open("company_config.yaml") as f:
-            cfg = yaml.safe_load(f)
-        threshold = cfg.get("escalation_chains", {}).get("infra", {}).get("failure_threshold", 2)
-        chain     = cfg.get("escalation_chains", {}).get("infra", {}).get("levels", [])
+        from app.Models.TenantConfig import TenantConfig
+        tc        = TenantConfig.get(client.tenant_id)
+        infra_cfg = tc.get("escalation_chain", {}).get("infra", {})
+        threshold = infra_cfg.get("failure_threshold", 2)
+        chain     = infra_cfg.get("levels", [])
     except Exception:
         threshold = 2
         chain = []

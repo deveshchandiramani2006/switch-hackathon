@@ -53,7 +53,9 @@ app/Services/
 ├── FeatureGateService.py    — Subscription tier enforcement (called before all LLM ops)
 ├── UsageAnalyticsService.py — Command execution logging (called in all route_command fns)
 ├── OnboardingService.py     — 4-step setup wizard for new tenants
-├── LlmService.py            — Multi-provider LLM router, 3-attempt retry + backoff
+├── LlmService.py            — Multi-provider LLM router, retry + backoff + circuit breaker
+├── BillingService.py        — Stripe checkout, webhook handler, plan management
+├── EmailService.py          — SMTP / SendGrid email sender (escalation fallback)
 ├── DatabaseService.py       — psycopg2 context manager
 ├── MemoryService.py         — Agent event log + pattern extraction
 ├── ApprovalsService.py      — Approval request lifecycle
@@ -201,6 +203,11 @@ All endpoints require `Authorization: Bearer <MASTER_KEY>` unless noted.
 | GET | `/api/v1/tenants/{id}/agents/status` | Live agent heartbeat status |
 | GET | `/api/v1/tenants/{id}/audit-log` | Immutable audit trail |
 | DELETE | `/api/v1/tenants/{id}/purge` | GDPR hard delete — wipes all tenant data |
+| GET | `/api/v1/tenants/{id}/billing` | Plan info + upgrade options |
+| POST | `/api/v1/tenants/{id}/billing/checkout` | Create Stripe checkout session |
+| PATCH | `/api/v1/tenants/{id}/billing/plan` | Admin plan override (audit-logged) |
+| POST | `/api/v1/billing/webhook` | Stripe payment webhook (Stripe-signed) |
+| GET | `/api/v1/tenants/{id}/search?q=term` | Cross-agent entity search |
 | GET | `/api/v1/health` | Health check (no auth) |
 
 **Webhook signing:**

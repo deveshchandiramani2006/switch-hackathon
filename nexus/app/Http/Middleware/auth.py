@@ -79,3 +79,41 @@ def require_webhook_signature(f):
             return jsonify({"error": "Invalid webhook signature"}), 401
         return f(*args, **kwargs)
     return decorated
+
+
+import time
+import threading
+
+_rate_buckets: dict = {}
+_rate_lock = threading.Lock()
+
+def _check_rate_limit(key: str, limit: int = 120, window: int = 60) -> bool:
+    """Token bucket: `limit` calls per `window` seconds. Returns True if allowed."""
+    now = time.time()
+    with _rate_lock:
+        bucket = _rate_buckets.get(key, {"tokens": limit, "last_refill": now})
+        elapsed = now - bucket["last_refill"]
+        refill  = elapsed * (limit / window)
+        bucket["tokens"] = min(limit, bucket["tokens"] + refill)
+        bucket["last_refill"] = now
+        if bucket["tokens"] >= 1:
+            bucket["tokens"] -= 1
+            _rate_buckets[key] = bucket
+            return True
+        _rate_buckets[key] = bucket
+        return False
+
+
+def require_master_key_with_rate_limit(f):
+    """require_master_key + 120 req/min rate limit per API key."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.headers.get("Authorization", "")
+        if not MASTER_KEY:
+            abort(500, "NEXUS_MASTER_KEY not configured")
+        if auth != f"Bearer {MASTER_KEY}":
+            abort(401, "Unauthorized")
+        if not _check_rate_limit(auth):
+            return jsonify({"error": "Rate limit exceeded — 120 req/min"}), 429
+        return f(*args, **kwargs)
+    return decorated

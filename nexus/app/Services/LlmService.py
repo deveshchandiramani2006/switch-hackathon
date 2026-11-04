@@ -5,6 +5,7 @@ Falls back to secondary provider on failure.
 """
 import os
 import logging
+import threading
 import requests
 from dotenv import load_dotenv
 
@@ -20,6 +21,47 @@ PROVIDERS = {
     "cohere":    {"pkg": "cohere",              "models": ["command-r-plus", "command-r"]},
     "ollama":    {"local": True,                "models": ["mistral", "llama3.2", "phi3", "qwen2.5"]},
 }
+
+class _CircuitBreaker:
+    """Per-provider circuit breaker: CLOSED -> OPEN (after N failures) -> HALF_OPEN (after timeout)."""
+    FAILURE_THRESHOLD = 5
+    RECOVERY_TIMEOUT  = 120  # seconds
+
+    def __init__(self):
+        self._state = {}  # provider -> {state, failures, opened_at}
+        self._lock  = threading.Lock()
+
+    def allow(self, provider: str) -> bool:
+        import time
+        with self._lock:
+            s = self._state.get(provider, {"state": "closed", "failures": 0, "opened_at": 0.0})
+            if s["state"] == "closed":
+                return True
+            if s["state"] == "open":
+                if time.time() - s["opened_at"] > self.RECOVERY_TIMEOUT:
+                    s["state"] = "half_open"
+                    self._state[provider] = s
+                    return True
+                return False
+            return True  # half_open — let one through
+
+    def on_success(self, provider: str):
+        with self._lock:
+            self._state[provider] = {"state": "closed", "failures": 0, "opened_at": 0.0}
+
+    def on_failure(self, provider: str):
+        import time
+        with self._lock:
+            s = self._state.get(provider, {"state": "closed", "failures": 0, "opened_at": 0.0})
+            s["failures"] = s.get("failures", 0) + 1
+            if s["failures"] >= self.FAILURE_THRESHOLD or s["state"] == "half_open":
+                s["state"]     = "open"
+                s["opened_at"] = time.time()
+                logger.warning(f"Circuit breaker OPEN for provider '{provider}'")
+            self._state[provider] = s
+
+
+_breaker = _CircuitBreaker()
 
 CLOUD_AGENTS = {"sales", "support", "geo_seo"}
 
@@ -118,6 +160,17 @@ class LLMClient:
         raise last_exc
 
     def _dispatch(self, provider: str, model: str, prompt: str, json_mode: bool, system: str) -> str:
+        if not _breaker.allow(provider):
+            raise RuntimeError(f"Circuit breaker OPEN for '{provider}' — skipping to fallback")
+        try:
+            result = self._route(provider, model, prompt, json_mode, system)
+            _breaker.on_success(provider)
+            return result
+        except Exception as e:
+            _breaker.on_failure(provider)
+            raise
+
+    def _route(self, provider: str, model: str, prompt: str, json_mode: bool, system: str) -> str:
         if provider == "anthropic":
             return self._anthropic(prompt, json_mode, system, model)
         elif provider == "openai":
