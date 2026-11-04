@@ -1,153 +1,161 @@
-# NEXUS Agent Reference
+# NEXUS Agent Command Reference
 
-## SalesAgent
+All commands are issued in the agent's Switch room by @mentioning the agent.
+Commands marked with ✦ open a **guided wizard** — the bot asks for each field one at a time.
+Commands marked with ⚡ also accept inline syntax for power users.
 
-### Purpose
-Live in `#nexus-sales`. Passively monitors every message for customer commitments. Provides CRM commands for the sales team.
-
-### Addressing Mode
-`anyone` — reads all messages in the room.
-
-### Passive Behavior
-Every message (not from an agent) is sent to Claude for commitment detection. Claude returns JSON indicating whether a commitment was found, who made it, what they committed to, and by when.
-
-### Commands (prefix with `@SalesAgent`)
-
-| Command | Description |
-|---------|-------------|
-| `new lead: Name, Role, City, Industry, Value` | Add a lead to CRM |
-| `pipeline` | Show all leads by deal value |
-| `pipeline: Bangalore` | Filter pipeline by city |
-| `lead: Name` | Show full lead card with commitments |
-| `follow up: Name` | Generate AI follow-up draft |
-| `format: [msg] as: executive` | Reformat message in a tone |
-| `won: Name` | Mark deal won |
-| `lost: Name -- reason: X` | Mark deal lost with reason |
-| `set commitment: X will do Y by Z` | Manual commitment entry |
-| `stale leads` | Show leads not touched in 7+ days |
-
-### Escalation
-Runs every `ESCALATION_CHECK_MINUTES` (default 60). For each overdue commitment:
-1. Waits `wait_hours` from previous escalation
-2. Generates an AI message in the appropriate tone for the escalation level
-3. Posts `@target message` to the room
-4. Logs to `escalation_log` table
+Type `cancel` at any step in a wizard to abort.
 
 ---
 
-## SupportAgent
+## SalesAgent (#nexus-sales)
 
-### Purpose
-Lives in `#nexus-support`. Passively triages bug reports, tracks severity, and maintains an open bug list.
+| Command | Wizard | Description |
+|---------|--------|-------------|
+| `@SalesAgent new lead` | ✦⚡ | Add a new prospect |
+| `@SalesAgent new lead: Name, Role, City, Industry, Value` | ⚡ | Quick add (inline) |
+| `@SalesAgent pipeline` | | Full pipeline sorted by deal value |
+| `@SalesAgent pipeline: Bangalore` | | Pipeline filtered by city |
+| `@SalesAgent lead: Name` | | Lead card with commitments |
+| `@SalesAgent follow up: Name` | | Generate AI follow-up draft |
+| `@SalesAgent format` | ✦⚡ | Reformat a message in chosen style |
+| `@SalesAgent won: Name` | | Mark deal Closed-Won |
+| `@SalesAgent lost: Name -- reason: ...` | | Mark deal Closed-Lost |
+| `@SalesAgent set commitment` | ✦⚡ | Manually track a commitment |
+| `@SalesAgent stale leads` | | Leads not touched in 7+ days |
+| `@SalesAgent patterns` / `memory` / `knowledge: keyword` | | Agent memory |
 
-### Addressing Mode
-`anyone` — reads all messages.
+**Passive:** Reads every message in room. Detects commitment language and auto-starts escalation clock.
 
-### Passive Behavior
-Scans for keywords: crash, error, bug, broken, down, fail, 500, timeout. If detected and message is 20+ chars, auto-triages via LLM.
-
-### Commands (prefix with `@SupportAgent`)
-
-| Command | Description |
-|---------|-------------|
-| `bug: description` | File and triage a bug |
-| `status` | Show all open bugs |
-| `close: #id` | Close a bug |
-| `bugs: open P0` | Filter bugs by status/severity |
-
-### Severity Classification
-Claude classifies every bug as P0/P1/P2/P3:
-- **P0** — Production down, data loss, security breach
-- **P1** — Major feature broken, blocks users
-- **P2** — Degraded experience, workaround exists
-- **P3** — Minor, cosmetic
+**Cross-agent out:** `DEAL_WON:` → CSAgent + FinanceAgent on `won:` command.
 
 ---
 
-## GeoSEOAgent
-
-### Purpose
-Lives in `#nexus-growth`. Runs keyword analysis cycles, detects trending topics and content gaps, dispatches content briefs to BlogAgent.
-
-### Addressing Mode
-`owner_and_owner_agents` — receives @mentions and cross-agent signals only.
-
-### Scheduled Behavior
-Every `GEO_SEO_INTERVAL_HOURS` (default 24), runs analysis cycle:
-1. Fetches data for all tracked + initial keywords from SerpAPI (or mock)
-2. For trending keywords (>200% trend) or content gaps: creates brief in `content_queue`
-3. Sends `BRIEF:` signal to BlogAgent via Switch `send_targeted_message`
-
-### Commands (prefix with `@GeoSEOAgent`)
+## SupportAgent (#nexus-support)
 
 | Command | Description |
 |---------|-------------|
-| `run now` | Trigger analysis cycle immediately |
-| `trending` | Show tracked keywords and rankings |
-| `report` | Summary stats |
-| `queue` | Show content queue |
-| `track: keyword` | Add keyword to tracking list |
+| `@SupportAgent bug: description` | File a bug (AI classifies P0–P3) |
+| `@SupportAgent status` | All open bugs |
+| `@SupportAgent bugs: open P1` | Filter by status + severity |
+| `@SupportAgent close: #id` | Close a bug |
+| `@SupportAgent patterns` / `memory` / `knowledge: keyword` | Agent memory |
 
-### Cross-Agent Protocol
-- **Out:** `BRIEF: keyword=X volume=Y trend=Z queue_id=N reason=W`
-- **In:** `POST_PUBLISHED: keyword=X url=Y`
+**Passive:** Scans every message for bug keywords (crash, error, timeout…) and auto-triages.
+
+**Cross-agent out:** P0/P1 bugs send `P1_BREACH:` to CSAgent.
 
 ---
 
-## BlogAgent
+## CSAgent (#nexus-cs)
 
-### Purpose
-Lives in `#nexus-content`. Receives SEO briefs, generates drafts via LLM, posts for approval, publishes to CMS.
+| Command | Wizard | Description |
+|---------|--------|-------------|
+| `@CSAgent add customer` | ✦⚡ | Onboard a new customer |
+| `@CSAgent add customer: Name, Rs5L, renewal: 2027-03-31` | ⚡ | Quick add |
+| `@CSAgent health: CustomerName` | | Health score + signals |
+| `@CSAgent at-risk` | | Customers with health score < 70 |
+| `@CSAgent renewals` / `renewals: 60` | | Upcoming renewals |
+| `@CSAgent nps` | ✦⚡ | Log NPS score |
+| `@CSAgent nps: Name, score: 7, note: feedback` | ⚡ | Quick NPS |
+| `@CSAgent expansion: CustomerName` | | AI expansion analysis |
+| `@CSAgent qbr: CustomerName` | | Generate QBR agenda |
+| `@CSAgent weekly report` | | CS weekly summary |
 
-### Addressing Mode
-`owner_and_owner_agents` — receives @mentions and GeoSEO signals.
-
-### Workflow
-1. Receives `BRIEF:` signal from GeoSEOAgent
-2. Generates 600-word SEO blog post via Ollama/Mistral
-3. Posts draft preview to room for human approval
-4. On `approve`: publishes to CMS, signals GeoSEOAgent
-5. On `reject`: removes from queue
-
-### Commands (prefix with `@BlogAgent`)
-
-| Command | Description |
-|---------|-------------|
-| `draft: topic` | Manual draft request |
-| `queue` | Show content queue |
-| `preview: #id` | Preview a specific draft |
-
-### Direct Commands (no @mention needed)
-| Message | Action |
-|---------|--------|
-| `approve` | Approve and publish top draft |
-| `reject` | Reject top draft |
-
-### Blog API Adapters
-Set `BLOG_API_ADAPTER` to: `custom` (default), `wordpress`, or `ghost`.
-Set `BLOG_MOCK_MODE=true` to skip actual publishing (returns mock URL).
+**Cross-agent in:** `DEAL_WON:` (SalesAgent) → auto-creates customer. `P1_BREACH:` (SupportAgent) → reduces health score.
 
 ---
 
-## InfraAgent
+## FinanceAgent (#nexus-finance)
 
-### Purpose
-Lives in `#nexus-devops`. Monitors service health every 5 minutes, alerts on-call when services go down.
+| Command | Wizard | Description |
+|---------|--------|-------------|
+| `@FinanceAgent invoice` | ✦⚡ | Log invoice for approval |
+| `@FinanceAgent invoice: Vendor, Rs50000, due: 2026-11-15, category: software` | ⚡ | Quick add |
+| `@FinanceAgent invoices` | | List all invoices |
+| `@FinanceAgent approve: invoice-042` | | Approve invoice (manager+) |
+| `@FinanceAgent reject` | ✦⚡ | Reject invoice with reason |
+| `@FinanceAgent reject: invoice-042, reason: duplicate` | ⚡ | Quick reject |
+| `@FinanceAgent expense` | ✦⚡ | Submit expense claim |
+| `@FinanceAgent expense: Name, Rs3200, travel, 2026-11-04` | ⚡ | Quick expense |
+| `@FinanceAgent expenses pending` | | Pending expense claims |
+| `@FinanceAgent budget: Q4 marketing` | | Budget burn rate |
+| `@FinanceAgent overdue` | | Overdue invoices |
+| `@FinanceAgent weekly report` / `forecast` | | Financial summary / 30-day forecast |
 
-### Addressing Mode
-`anyone` — receives all messages but only responds to @mentions.
+**Cross-agent in:** `DEAL_WON:` → auto-creates expected revenue invoice.
 
-### Scheduled Behavior
-Every 5 minutes:
-1. HTTP GET each monitored service URL
-2. If response >= 500 or unreachable: increment `consecutive_failures`
-3. If `consecutive_failures >= failure_threshold` (default 2): post alert to room tagging on-call
+---
 
-### Commands (prefix with `@InfraAgent`)
+## GeoSEOAgent (#nexus-growth)
 
 | Command | Description |
 |---------|-------------|
-| `status` | Show all monitored services |
-| `ping: url` | One-time health check |
-| `add: name -> url` | Add service to monitoring |
-| `jobs` | Show scheduler info |
+| `@GeoSEOAgent run now` | Trigger immediate analysis cycle |
+| `@GeoSEOAgent trending` | Tracked keywords + volumes |
+| `@GeoSEOAgent report` | SEO summary |
+| `@GeoSEOAgent queue` | Content queue status |
+| `@GeoSEOAgent track: keyword` | Add keyword to tracking |
+
+**Cross-agent out:** Trending keyword → signals SalesAgent (`GEO_SIGNAL:`) + BlogAgent (`BRIEF:`).
+
+**Cross-agent in:** `POST_PUBLISHED:` from BlogAgent → starts ranking tracking.
+
+---
+
+## BlogAgent (#nexus-content)
+
+| Command | Wizard | Description |
+|---------|--------|-------------|
+| `@BlogAgent draft` | ✦⚡ | Generate a blog draft |
+| `@BlogAgent draft: topic` | ⚡ | Quick draft |
+| `@BlogAgent queue` | | Content queue |
+| `@BlogAgent preview: #id` | | Preview draft |
+| `approve #42` | | Approve and publish draft #42 |
+| `approve #42 -- edit: change CTA to X` | | Approve with inline edit |
+| `reject #42` | | Reject draft |
+| `reject #42 -- reason: too long` | | Reject with reason |
+
+**Approval requires draft ID** — prevents accidental triggers. Approval expires after 24 hours.
+
+**Cross-agent in:** `BRIEF:` from GeoSEOAgent → triggers draft generation.
+
+**Cross-agent out:** `POST_PUBLISHED:` to GeoSEOAgent after publish.
+
+---
+
+## InfraAgent (#nexus-devops)
+
+| Command | Wizard | Description |
+|---------|--------|-------------|
+| `@InfraAgent status` | | Health of all monitored services |
+| `@InfraAgent ping: https://url` | | One-time health check |
+| `@InfraAgent add` | ✦⚡ | Add service to monitoring |
+| `@InfraAgent add: service-name -> https://url` | ⚡ | Quick add |
+
+**Automatic monitoring:** Health checks every 5 min. N consecutive failures → alert + on-call ping.
+
+---
+
+## Validation Formats
+
+| Field | Accepted Formats |
+|-------|-----------------|
+| Money | `Rs50000`, `Rs5L`, `Rs1Cr`, `50000` |
+| Date | `YYYY-MM-DD`, `DD/MM/YYYY`, `today`, `tomorrow`, `next Friday` |
+| URL | Must start with `https://` |
+| NPS score | Integer 0–10 |
+| Severity | `P0` (critical), `P1` (major), `P2` (degraded), `P3` (minor) |
+
+---
+
+## Role-Based Access
+
+| Role | Key Permissions |
+|------|----------------|
+| admin | All commands, user management, config |
+| manager | Approve invoices, close P0 bugs, all data |
+| member | Create leads, log bugs, submit expenses |
+| viewer | Read-only (pipeline, status) |
+
+Set roles via API: `PATCH /api/v1/tenants/{id}/users/{username}/role`
