@@ -226,3 +226,103 @@ def webhook_deploy(tenant_id):
 
 def health_check():
     return jsonify({"status": "ok", "version": "2.0.0"})
+
+
+# ── Webhook secret ─────────────────────────────────────────────────────────────
+
+def get_webhook_secret(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    with db_cursor() as cur:
+        cur.execute("SELECT webhook_secret FROM tenants WHERE tenant_id=%s", (tenant_id,))
+        row = cur.fetchone()
+    if not row or not row["webhook_secret"]:
+        return jsonify({"error": "Webhook secret not set"}), 404
+    return jsonify({"tenant_id": tenant_id, "webhook_secret": row["webhook_secret"]})
+
+
+def rotate_webhook_secret(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    import secrets
+    new_secret = secrets.token_hex(32)
+    with db_cursor() as cur:
+        cur.execute("UPDATE tenants SET webhook_secret=%s WHERE tenant_id=%s", (new_secret, tenant_id))
+    logger.info(f"Webhook secret rotated for tenant {tenant_id}")
+    return jsonify({"tenant_id": tenant_id, "webhook_secret": new_secret})
+
+
+# ── Tenant config ─────────────────────────────────────────────────────────────
+
+def get_tenant_config(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    from app.Models.TenantConfig import TenantConfig
+    TenantConfig.ensure_exists(tenant_id)
+    return jsonify({"tenant_id": tenant_id, "config": TenantConfig.get(tenant_id)})
+
+
+def update_tenant_config(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    body = request.get_json(force=True) or {}
+    allowed = {"escalation_chain", "integrations", "thresholds", "agent_flags", "llm_config", "geo_seo_config"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        return jsonify({"error": f"No valid fields. Allowed: {', '.join(allowed)}"}), 400
+    from app.Models.TenantConfig import TenantConfig
+    ok = TenantConfig.save(tenant_id, **updates)
+    if not ok:
+        return jsonify({"error": "Config update failed"}), 500
+    return jsonify({"tenant_id": tenant_id, "status": "updated", "updated_fields": list(updates.keys())})
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+def get_analytics(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    days = int(request.args.get("period", "7").replace("d", ""))
+    from app.Services.UsageAnalyticsService import UsageAnalyticsService
+    summary = UsageAnalyticsService.get_summary(tenant_id, days=days)
+    return jsonify({"tenant_id": tenant_id, **summary})
+
+
+# ── Onboarding ────────────────────────────────────────────────────────────────
+
+def get_onboarding_status(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    from app.Services.OnboardingService import OnboardingService
+    return jsonify(OnboardingService.get_status(tenant_id))
+
+
+# ── User management ───────────────────────────────────────────────────────────
+
+def list_users(tenant_id):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT username, display_name, role, joined_at, last_seen FROM tenant_users "
+            "WHERE tenant_id=%s ORDER BY joined_at DESC",
+            (tenant_id,)
+        )
+        users = cur.fetchall()
+    return jsonify({"tenant_id": tenant_id, "users": [dict(u) for u in users]})
+
+
+def set_user_role(tenant_id, username):
+    if not tenant_exists(tenant_id):
+        return jsonify({"error": "Tenant not found"}), 404
+    body = request.get_json(force=True) or {}
+    role = body.get("role", "").strip()
+    from app.Services.ValidationService import validate_role
+    role, err = validate_role(role)
+    if err:
+        return jsonify({"error": err}), 400
+    from app.Services.UserIdentityService import UserIdentityService
+    ok = UserIdentityService.set_role(tenant_id, username, role)
+    if not ok:
+        return jsonify({"error": "Failed to set role"}), 500
+    return jsonify({"tenant_id": tenant_id, "username": username, "role": role})
