@@ -55,7 +55,7 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*InfraAgent — Service Monitoring*\n"
+            _section("*InfraAgent: Service Monitoring*\n"
                      "• `status`\n"
                      "• `ping: https://url`\n"
                      "• `add: name -> https://url`\n"

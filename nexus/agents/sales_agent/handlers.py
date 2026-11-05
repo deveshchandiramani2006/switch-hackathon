@@ -85,7 +85,7 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*SalesAgent — Pipeline & Leads*\n"
+            _section("*SalesAgent: Pipeline & Leads*\n"
                      "• `new lead` — guided form\n"
                      "• `new lead: Name, Role, City, Industry, Value`\n"
                      "• `pipeline`\n"

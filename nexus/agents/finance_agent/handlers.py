@@ -88,7 +88,7 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*FinanceAgent — Invoices & Expenses*\n"
+            _section("*FinanceAgent: Invoices & Expenses*\n"
                      "• `invoice: Vendor, Rs50K, due: 2026-11-15, category: software`\n"
                      "• `invoices`\n"
                      "• `approve: invoice-042`\n"

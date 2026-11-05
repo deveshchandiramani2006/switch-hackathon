@@ -78,7 +78,7 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*SupportAgent — Bug Triage*\n"
+            _section("*SupportAgent: Bug Triage*\n"
                      "• `bug: description, severity: P1`\n"
                      "• `status`\n"
                      "• `close: #42`\n"

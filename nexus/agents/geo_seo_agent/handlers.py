@@ -67,7 +67,7 @@ def handle_message(client, payload: dict):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*GeoSEOAgent — SEO & AI Citability*\n"
+            _section("*GeoSEOAgent: SEO & AI Citability*\n"
                      "• `track: keyword`\n"
                      "• `run now`\n"
                      "• `trending`\n"

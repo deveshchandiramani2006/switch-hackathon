@@ -87,7 +87,7 @@ def handle_message(client, payload: dict):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*BlogAgent — Content Drafts*\n"
+            _section("*BlogAgent: Content Drafts*\n"
                      "• `draft: topic` or `draft` — guided form\n"
                      "• `queue`\n"
                      "• `preview: #42`\n"
