@@ -53,13 +53,11 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
             "Use `@InfraAgent status` to see current state."
         )
     else:
-        client.post_message(
-            "Commands:\n"
-            "- `@InfraAgent status`\n"
-            "- `@InfraAgent ping: url`\n"
-            "- `@InfraAgent add: name -> url`\n"
-            "- `@InfraAgent add` (guided wizard)"
-        )
+        from app.Services.BlockBuilder import _section
+        client.post_blocks([
+            _section("*InfraAgent — service monitoring*\n"
+                     "`status`  `ping: url`  `add: name -> https://url`  `add` (guided)  `jobs`")
+        ], fallback_text="InfraAgent commands")
 
 
 def show_status(client, tenant_id: str):
@@ -88,13 +86,12 @@ def show_status(client, tenant_id: str):
 def ping_service(client, url: str):
     try:
         resp = req.get(url, timeout=10)
-        icon = "[OK]" if resp.status_code < 400 else "[FAIL]"
+        emoji = "✅" if resp.status_code < 400 else "⚠️"
         client.post_message(
-            f"{icon} {url} -- HTTP {resp.status_code} "
-            f"({resp.elapsed.total_seconds()*1000:.0f}ms)"
+            f"{emoji} `{url}` — HTTP {resp.status_code} · {resp.elapsed.total_seconds()*1000:.0f}ms"
         )
     except Exception as e:
-        client.post_message(f"[DOWN] {url} -- unreachable: {e}")
+        client.post_message(f"🔴 `{url}` — unreachable: {e}")
 
 
 def add_service(client, text: str, tenant_id: str):

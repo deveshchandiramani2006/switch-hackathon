@@ -86,19 +86,14 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
     elif t.startswith("knowledge:"):
         _cmd_knowledge(client, text.split(":", 1)[1].strip(), tenant_id)
     else:
-        client.post_message(
-            "FinanceAgent commands:\n"
-            "- `@FinanceAgent invoice: Vendor, Rs50000, due: 2026-11-15, category: software`\n"
-            "- `@FinanceAgent invoices`\n"
-            "- `@FinanceAgent approve: invoice-042`\n"
-            "- `@FinanceAgent reject: invoice-042, reason: duplicate`\n"
-            "- `@FinanceAgent budget: Q4 marketing`\n"
-            "- `@FinanceAgent expense: Name, Rs3200, travel, 2026-11-04`\n"
-            "- `@FinanceAgent expenses pending`\n"
-            "- `@FinanceAgent overdue`\n"
-            "- `@FinanceAgent weekly report`\n"
-            "- `@FinanceAgent forecast`"
-        )
+        from app.Services.BlockBuilder import _section
+        client.post_blocks([
+            _section("*FinanceAgent — invoices & expenses*\n"
+                     "`invoice: Vendor, Rs50K, due: 2026-11-15, category: software`  `invoices`\n"
+                     "`approve: invoice-042`  `reject: invoice-042, reason: X`  `budget: category`\n"
+                     "`expense: Name, Rs3200, travel, 2026-11-04`  `expenses pending`  `overdue`\n"
+                     "`weekly report`  `forecast`")
+        ], fallback_text="FinanceAgent commands")
 
 
 # ── Commands ───────────────────────────────────────────────────────────────────
@@ -186,8 +181,7 @@ def _cmd_approve_invoice(client, text: str, sender: str, tenant_id: str):
 
     if row:
         client.post_message(
-            f"Invoice-{row['id']:03d} approved\n"
-            f"*{row['vendor']}* {_fmt_v(row['amount'])} approved by @{sender}"
+            f"✅ Invoice #{row['id']:03d} approved — *{row['vendor']}* {_fmt_v(row['amount'])}"
         )
     else:
         client.post_message(f"Invoice '{ref}' not found.")
@@ -231,13 +225,12 @@ def _cmd_budget_status(client, name: str, tenant_id: str):
 
     pct  = round(budget["spent"] / budget["allocated"] * 100) if budget["allocated"] > 0 else 0
     rem  = budget["allocated"] - budget["spent"]
-    icon = "[OK]" if pct < 75 else ("[WARN]" if pct < 90 else "[CRITICAL]")
-    client.post_message(
-        f"*Budget: {budget['name']}* {icon}\n"
-        f"Period: {budget['period'] or 'N/A'}\n"
-        f"Allocated: {_fmt_v(budget['allocated'])} | Spent: {_fmt_v(budget['spent'])} | Remaining: {_fmt_v(rem)}\n"
-        f"Burn: {pct}%"
-    )
+    emoji = "✅" if pct < 75 else ("⚠️" if pct < 90 else "🚨")
+    from app.Services.BlockBuilder import _section, _context
+    client.post_blocks([
+        _section(f"{emoji} *{budget['name']}* — {pct}% burned"),
+        _context(f"Spent: {_fmt_v(budget['spent'])}", f"Remaining: {_fmt_v(rem)}", f"of {_fmt_v(budget['allocated'])}"),
+    ], fallback_text=f"Budget {budget['name']}: {pct}% burned")
 
 
 def _cmd_expense(client, text: str, sender: str, tenant_id: str):
@@ -265,9 +258,7 @@ def _cmd_expense(client, text: str, sender: str, tenant_id: str):
         exp_id = cur.fetchone()["id"]
 
     client.post_message(
-        f"Expense claim #{exp_id} logged\n"
-        f"{submitter} | {_fmt_v(amount)} | {category} | {expense_date or date.today()}\n"
-        f"Status: pending approval"
+        f"⏳ Expense #{exp_id} logged — *{submitter}* {_fmt_v(amount)} · {category}"
     )
 
 
@@ -285,9 +276,9 @@ def _cmd_expenses_pending(client, tenant_id: str):
         return
 
     total = sum(r["amount"] for r in rows)
-    lines = [f"*Pending expense claims ({len(rows)} | total: {_fmt_v(total)}):*\n"]
+    lines = [f"*Pending expenses — {len(rows)} claims · {_fmt_v(total)} total*\n"]
     for r in rows:
-        lines.append(f"- #{r['id']} | {r['submitter']} | {_fmt_v(r['amount'])} | {r['category']} | {r['expense_date']}")
+        lines.append(f"⏳ *{r['submitter']}* — {_fmt_v(r['amount'])} · {r['category']}")
     client.post_message("\n".join(lines))
 
 
@@ -305,10 +296,10 @@ def _cmd_overdue(client, tenant_id: str):
         client.post_message("No overdue invoices.")
         return
 
-    lines = [f"*Overdue invoices ({len(rows)}):*\n"]
+    lines = [f"*Overdue invoices ({len(rows)})*\n"]
     for r in rows:
         days_over = (date.today() - r["due_date"]).days
-        lines.append(f"- invoice-{r['id']:03d} | *{r['vendor']}* | {_fmt_v(r['amount'])} | {days_over}d overdue")
+        lines.append(f"🚨 *{r['vendor']}* — {_fmt_v(r['amount'])} · {days_over}d overdue")
     client.post_message("\n".join(lines))
 
 
@@ -327,11 +318,11 @@ def _cmd_weekly_report(client, tenant_id: str):
         burn  = round(spent / alloc * 100) if alloc > 0 else 0
 
     client.post_message(
-        f"*FinanceAgent Weekly Report*\n"
-        f"Pending invoices: {inv_row['cnt']} | total: {_fmt_v(inv_row['total'] or 0)}\n"
-        f"Overdue invoices: {overdue_cnt}\n"
-        f"Pending expense claims: {exp_row['cnt']} | total: {_fmt_v(exp_row['total'] or 0)}\n"
-        f"Budget burn: {burn}% ({_fmt_v(spent)} of {_fmt_v(alloc)})"
+        f"*Finance Weekly*\n"
+        f"⏳ {inv_row['cnt']} pending invoices · {_fmt_v(inv_row['total'] or 0)}\n"
+        f"🚨 {overdue_cnt} overdue\n"
+        f"💸 {exp_row['cnt']} expense claims · {_fmt_v(exp_row['total'] or 0)}\n"
+        f"📊 Budget: {burn}% burned ({_fmt_v(spent)} of {_fmt_v(alloc)})"
     )
 
 
@@ -366,11 +357,10 @@ def _cmd_forecast(client, tenant_id: str):
 
     burn_rate = outflow + exp_total  # last 30 days spend
     client.post_message(
-        f"*FinanceAgent Forecast*\n"
-        f"Last 30d spend: {_fmt_v(burn_rate)} (invoices: {_fmt_v(outflow)} + expenses: {_fmt_v(exp_total)})\n"
-        f"Pending payables: {_fmt_v(pending_outflow)}\n"
-        f"Budget remaining: {_fmt_v(alloc - spent)} of {_fmt_v(alloc)} allocated\n"
-        f"Projected monthly run rate: {_fmt_v(burn_rate)}"
+        f"*Finance Forecast*\n"
+        f"📉 30d spend: {_fmt_v(burn_rate)} · run rate: {_fmt_v(burn_rate)}/mo\n"
+        f"⏳ Pending payables: {_fmt_v(pending_outflow)}\n"
+        f"💰 Budget remaining: {_fmt_v(alloc - spent)} of {_fmt_v(alloc)}"
     )
 
 
@@ -381,7 +371,7 @@ def _cmd_patterns(client, tenant_id: str):
     if not patterns:
         client.post_message("No patterns detected yet.")
         return
-    lines = ["*FinanceAgent learned patterns:*\n"]
+    lines = ["*Patterns learned:*\n"]
     for p in patterns[:5]:
         lines.append(f"- {p['description']} (seen {p['occurrences']}x)")
     client.post_message("\n".join(lines))
@@ -394,7 +384,7 @@ def _cmd_memory(client, tenant_id: str):
     if not events:
         client.post_message("No memory events recorded yet.")
         return
-    lines = ["*FinanceAgent recent memory:*\n"]
+    lines = ["*Recent memory:*\n"]
     for ev in events[:5]:
         lines.append(f"- [{ev['event_type']}] {str(ev['context'] or '')[:80]}")
     client.post_message("\n".join(lines))
@@ -442,8 +432,7 @@ def _handle_deal_won(client, text: str):
         inv_id = cur.fetchone()["id"]
 
     client.post_message(
-        f"*Revenue logged* from SalesAgent deal win\n"
-        f"Customer: *{customer}* | Amount: {_fmt_v(amount)} | invoice-{inv_id:03d}"
+        f"💰 *{customer}* — {_fmt_v(amount)} revenue logged (invoice #{inv_id:03d})"
     )
     logger.info(f"FinanceAgent logged revenue from DEAL_WON: {customer} {amount}")
 
@@ -489,7 +478,7 @@ def cmd_expense_data(client, data: dict, sender: str, tenant_id: str):
         )
         exp_id = cur.fetchone()["id"]
     client.post_message(
-        f"Expense claim #{exp_id} logged\n{submitter} | {_fmt_v(amount)} | {data['category']} | {expense_date}\nStatus: pending approval"
+        f"⏳ Expense #{exp_id} logged — *{submitter}* {_fmt_v(amount)} · {data['category']}"
     )
 
 

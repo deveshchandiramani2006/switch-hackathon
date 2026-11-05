@@ -91,17 +91,13 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
     elif t.startswith("knowledge:"):
         _cmd_knowledge(client, text.split(":", 1)[1].strip(), tenant_id)
     else:
-        client.post_message(
-            "CSAgent commands:\n"
-            "- `@CSAgent add customer: Name, Rs500000, renewal: 2027-03-31`\n"
-            "- `@CSAgent health: CustomerName`\n"
-            "- `@CSAgent at-risk`\n"
-            "- `@CSAgent renewals` / `renewals: 30`\n"
-            "- `@CSAgent nps: Name, score: 7, note: feedback`\n"
-            "- `@CSAgent expansion: CustomerName`\n"
-            "- `@CSAgent qbr: CustomerName`\n"
-            "- `@CSAgent weekly report`"
-        )
+        from app.Services.BlockBuilder import _section
+        client.post_blocks([
+            _section("*CSAgent — customer success*\n"
+                     "`add customer: Name, Rs500K, renewal: 2027-03-31`  `health: Name`  `at-risk`\n"
+                     "`renewals` or `renewals: 60`  `nps: Name, score: 7, note: feedback`\n"
+                     "`expansion: Name`  `qbr: Name`  `weekly report`")
+        ], fallback_text="CSAgent commands")
 
 
 # ── Commands ───────────────────────────────────────────────────────────────────
@@ -135,9 +131,7 @@ def _cmd_add_customer(client, text: str, sender: str, tenant_id: str):
         cid = cur.fetchone()["id"]
 
     client.post_message(
-        f"Customer added (#{cid})\n"
-        f"*{name}* | ARR: {_fmt_v(arr)} | "
-        f"Renewal: {renewal_date or 'not set'} | CSM: @{sender}"
+        f"✅ *{name}* added — ARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
     )
 
 
@@ -155,18 +149,16 @@ def _cmd_health(client, name: str, tenant_id: str):
         return
 
     health = calculate_health(cust["id"], tenant_id)
-    icon = {"GREEN": "[GREEN]", "YELLOW": "[YELLOW]", "RED": "[RED]"}.get(health["level"], "")
+    icon = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}.get(health["level"], "⚫")
     renewal_str = str(cust["renewal_date"]) if cust["renewal_date"] else "not set"
 
-    lines = [
-        f"*{cust['name']}* {icon} Health: {health['score']}/100",
-        f"ARR: {_fmt_v(cust['arr'])} | NPS: {cust['nps'] or 'N/A'} | Renewal: {renewal_str}",
-        f"CSM: {cust['assigned_csm'] or 'unassigned'}",
-        f"\n*Health signals:*",
-    ]
-    for s in health["signals"]:
-        lines.append(f"- {s}")
-    client.post_message("\n".join(lines))
+    from app.Services.BlockBuilder import _section, _context
+    signals = " · ".join(health["signals"]) if health["signals"] else "No signals"
+    client.post_blocks([
+        _section(f"{icon} *{cust['name']}* — Health {health['score']}/100"),
+        _context(f"ARR: {_fmt_v(cust['arr'])}", f"NPS: {cust['nps'] or 'N/A'}", f"Renewal: {renewal_str}"),
+        _section(f"_{signals}_"),
+    ], fallback_text=f"{cust['name']} health: {health['score']}/100")
 
 
 def _cmd_at_risk(client, tenant_id: str):
@@ -183,15 +175,14 @@ def _cmd_at_risk(client, tenant_id: str):
         rows = cur.fetchall()
 
     if not rows:
-        client.post_message("No at-risk customers. All healthy!")
+        client.post_message("🟢 All customers healthy — no at-risk accounts.")
         return
 
-    lines = ["*At-risk customers:*\n"]
+    lines = [f"*At-risk ({len(rows)})*\n"]
     for r in rows:
-        level = "RED" if r["health_score"] < 50 else "YELLOW"
+        emoji = "🔴" if r["health_score"] < 50 else "🟡"
         lines.append(
-            f"- [{level}] *{r['name']}* | score {r['health_score']} | "
-            f"ARR {_fmt_v(r['arr'])} | CSM: {r['assigned_csm'] or 'unassigned'}"
+            f"{emoji} *{r['name']}* — score {r['health_score']} · {_fmt_v(r['arr'])}"
         )
     client.post_message("\n".join(lines))
 
@@ -214,13 +205,12 @@ def _cmd_renewals(client, days: int, tenant_id: str):
         client.post_message(f"No renewals in the next {days} days.")
         return
 
-    lines = [f"*Renewals in {days} days:*\n"]
+    lines = [f"*Renewals in {days} days ({len(rows)})*\n"]
     for r in rows:
         days_left = (r["renewal_date"] - date.today()).days
-        level = "GREEN" if r["health_score"] >= 70 else ("YELLOW" if r["health_score"] >= 50 else "RED")
+        emoji = "🟢" if r["health_score"] >= 70 else ("🟡" if r["health_score"] >= 50 else "🔴")
         lines.append(
-            f"- [{level}] *{r['name']}* | {_fmt_v(r['arr'])} | "
-            f"due {r['renewal_date']} ({days_left}d) | CSM: {r['assigned_csm'] or 'unassigned'}"
+            f"{emoji} *{r['name']}* — {_fmt_v(r['arr'])} · {days_left}d left"
         )
     client.post_message("\n".join(lines))
 
@@ -367,16 +357,16 @@ def _cmd_weekly_report(client, tenant_id: str):
         )
         top_red = cur.fetchall()
 
+    green = total - red - yellow
     lines = [
         "*CS Weekly Report*\n",
-        f"Total active customers: {total}",
-        f"Health: {total - red - yellow} GREEN | {yellow} YELLOW | {red} RED",
-        f"Renewals in 30 days: {renewals}",
+        f"🟢 {green}  🟡 {yellow}  🔴 {red}  of {total} active customers",
+        f"🔄 {renewals} renewals due in 30 days",
     ]
     if top_red:
-        lines.append("\n*Top at-risk by ARR:*")
+        lines.append("\n*Top at-risk:*")
         for r in top_red:
-            lines.append(f"- {r['name']}: {_fmt_v(r['arr'])}")
+            lines.append(f"🔴 {r['name']} — {_fmt_v(r['arr'])}")
     client.post_message("\n".join(lines))
 
 
@@ -387,7 +377,7 @@ def _cmd_patterns(client, tenant_id: str):
     if not patterns:
         client.post_message("No patterns detected yet. Keep using CSAgent and patterns will emerge.")
         return
-    lines = ["*CSAgent learned patterns:*\n"]
+    lines = ["*Patterns learned:*\n"]
     for p in patterns[:5]:
         lines.append(f"- {p['description']} (seen {p['occurrences']}x, confidence {p['confidence']:.0%})")
     client.post_message("\n".join(lines))
@@ -400,7 +390,7 @@ def _cmd_memory(client, tenant_id: str):
     if not events:
         client.post_message("No memory events recorded yet.")
         return
-    lines = ["*CSAgent recent memory:*\n"]
+    lines = ["*Recent memory:*\n"]
     for ev in events[:5]:
         lines.append(f"- [{ev['event_type']}] {str(ev['context'] or '')[:80]}")
     client.post_message("\n".join(lines))
@@ -457,8 +447,7 @@ def _handle_deal_won(client, text: str):
 
     if row:
         client.post_message(
-            f"*New customer onboarded* from SalesAgent deal win\n"
-            f"*{name}* | ARR: {_fmt_v(arr)} | Renewal: {renewal_date or 'not set'}"
+            f"🏆 *{name}* onboarded — ARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
         )
         logger.info(f"CSAgent created customer from DEAL_WON: {name}")
 
@@ -502,9 +491,7 @@ def _handle_p1_breach(client, text: str):
 
         csm = cust["assigned_csm"] or "@cs_team"
         client.post_message(
-            f"*P1 Breach Alert* — {customer} impacted\n"
-            f"Issue: {issue}\n"
-            f"Health score reduced. {csm} please follow up."
+            f"🚨 *P1 Breach* — {customer}\n_{issue}_\nHealth score reduced. {csm} follow up needed."
         )
 
 
@@ -525,7 +512,7 @@ def cmd_add_customer_data(client, data: dict, sender: str, tenant_id: str):
         )
         cid = cur.fetchone()["id"]
     client.post_message(
-        f"Customer added (#{cid})\n*{data['name']}* | ARR: {_fmt_v(arr)} | Renewal: {renewal_date or 'not set'} | CSM: @{sender}"
+        f"✅ *{data['name']}* added — ARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
     )
 
 

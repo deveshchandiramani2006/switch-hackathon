@@ -85,18 +85,13 @@ def handle_message(client, payload: dict):
     elif t.startswith("knowledge:"):
         _cmd_knowledge(client, clean.split(":", 1)[1].strip(), tenant_id)
     else:
-        client.post_message(
-            "Commands:\n"
-            "- `@BlogAgent draft: topic`\n"
-            "- `@BlogAgent draft` (guided wizard)\n"
-            "- `@BlogAgent queue`\n"
-            "- `@BlogAgent preview: #id`\n"
-            "- `approve #42` or `approve #42 -- edit: change CTA to X`\n"
-            "- `reject #42` or `reject #42 -- reason: too promotional`\n"
-            "- `@BlogAgent approve: change CTA to X` — approve top draft with edits\n"
-            "- `@BlogAgent delegate to @name`\n"
-            "- `@BlogAgent patterns` / `memory` / `knowledge: keyword`"
-        )
+        from app.Services.BlockBuilder import _section
+        client.post_blocks([
+            _section("*BlogAgent — content drafts*\n"
+                     "`draft: topic` or `draft` (guided)  `queue`  `preview: #id`\n"
+                     "`approve #42` or `approve #42 -- edit: change CTA`  `reject #42`\n"
+                     "`delegate to @name`  `patterns`  `memory`  `knowledge: topic`")
+        ], fallback_text="BlogAgent commands")
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +186,7 @@ def approve_draft_by_id(client, draft_id: int, sender: str, tenant_id: str, with
                 "UPDATE content_queue SET status='published', published_url=%s, published_at=NOW() WHERE id=%s",
                 (url, draft_id)
             )
-        client.post_message(f"Published -> {url}")
+        client.post_message(f"✅ Published — {url}")
         client.safe_signal("GeoSEOAgent", f"POST_PUBLISHED: keyword={draft['keyword'].replace(' ', '_')} url={url}")
     else:
         with db_cursor() as cur:
@@ -249,11 +244,7 @@ def handle_brief(client, text: str, tenant_id: str = "default"):
     reason   = parts.get("reason", "content_opportunity").replace("_", " ")
     geo      = parts.get("geo", "India").replace("_", " ")
 
-    client.post_message(
-        f"*Brief received:* {keyword}\n"
-        f"Volume: {volume}/mo | Trend: +{trend}%\n"
-        f"Generating draft..."
-    )
+    client.post_message(f"✍️ Drafting *{keyword}*...")
 
     from app.Services.FeatureGateService import FeatureGateService
     if not FeatureGateService.gate_llm(tenant_id, client):
@@ -367,7 +358,7 @@ def _cmd_patterns(client, tenant_id: str):
     if not patterns:
         client.post_message("No patterns detected yet.")
         return
-    lines = ["*BlogAgent learned patterns:*\n"]
+    lines = ["*Patterns learned:*\n"]
     for p in patterns[:5]:
         lines.append(f"- {p['description']} (seen {p['occurrences']}x)")
     client.post_message("\n".join(lines))
@@ -380,7 +371,7 @@ def _cmd_memory(client, tenant_id: str):
     if not events:
         client.post_message("No memory events recorded yet.")
         return
-    lines = ["*BlogAgent recent memory:*\n"]
+    lines = ["*Recent memory:*\n"]
     for ev in events[:5]:
         lines.append(f"- [{ev['event_type']}] {str(ev['context'] or '')[:80]}")
     client.post_message("\n".join(lines))

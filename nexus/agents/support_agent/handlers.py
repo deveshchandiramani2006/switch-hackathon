@@ -76,14 +76,12 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     elif t.startswith("knowledge:"):
         _cmd_knowledge(client, t.split(":", 1)[1].strip(), tenant_id)
     else:
-        client.post_message(
-            "Commands:\n"
-            "- `@SupportAgent bug: description`\n"
-            "- `@SupportAgent status`\n"
-            "- `@SupportAgent close: #bug-id`\n"
-            "- `@SupportAgent bugs: open P0`\n"
-            "- `@SupportAgent patterns` / `memory` / `knowledge: keyword`"
-        )
+        from app.Services.BlockBuilder import _section
+        client.post_blocks([
+            _section("*SupportAgent — bug triage*\n"
+                     "`bug: description`  `status`  `close: #id`\n"
+                     "`bugs: open P0`  `patterns`  `memory`  `knowledge: topic`")
+        ], fallback_text="SupportAgent commands")
 
 
 def _cmd_patterns(client, tenant_id: str):
@@ -93,7 +91,7 @@ def _cmd_patterns(client, tenant_id: str):
     if not patterns:
         client.post_message("No patterns detected yet.")
         return
-    lines = ["*SupportAgent learned patterns:*\n"]
+    lines = ["*Patterns learned:*\n"]
     for p in patterns[:5]:
         lines.append(f"- {p['description']} (seen {p['occurrences']}x)")
     client.post_message("\n".join(lines))
@@ -106,7 +104,7 @@ def _cmd_memory(client, tenant_id: str):
     if not events:
         client.post_message("No memory events recorded yet.")
         return
-    lines = ["*SupportAgent recent memory:*\n"]
+    lines = ["*Recent memory:*\n"]
     for ev in events[:5]:
         lines.append(f"- [{ev['event_type']}] {str(ev['context'] or '')[:80]}")
     client.post_message("\n".join(lines))
@@ -175,12 +173,14 @@ def show_status(client, tenant_id: str):
         rows = cur.fetchall()
 
     if not rows:
-        client.post_message("No open bugs.")
+        client.post_message("✅ No open bugs.")
         return
 
-    lines = ["*Open bugs:*\n"]
+    sev_emoji = {"P0": "🚨", "P1": "🔴", "P2": "🟡", "P3": "🔵"}
+    lines = [f"*Open bugs ({len(rows)})*\n"]
     for r in rows:
-        lines.append(f"- #{r['id']} [{r['severity']}] {r['description'][:60]}...")
+        emoji = sev_emoji.get(r["severity"], "⚫")
+        lines.append(f"{emoji} `#{r['id']}` *{r['severity']}* — {r['description'][:60]}")
     client.post_message("\n".join(lines))
 
 
@@ -193,7 +193,7 @@ def close_bug(client, ref: str, sender: str, tenant_id: str):
         )
         row = cur.fetchone()
     if row:
-        client.post_message(f"Bug #{bug_id} closed by @{sender}")
+        client.post_message(f"✅ Bug #{bug_id} closed")
     else:
         client.post_message(f"Bug #{bug_id} not found.")
 
@@ -227,7 +227,10 @@ def filter_bugs(client, filter_str: str, tenant_id: str):
         client.post_message(f"No {status} bugs{' at ' + sev if sev else ''}.")
         return
 
-    lines = [f"*{status.title()} bugs{' -- ' + sev if sev else ''}:*\n"]
+    sev_emoji = {"P0": "🚨", "P1": "🔴", "P2": "🟡", "P3": "🔵"}
+    label = f"{status.title()} bugs" + (f" — {sev}" if sev else "")
+    lines = [f"*{label} ({len(rows)})*\n"]
     for r in rows:
-        lines.append(f"- #{r['id']} [{r['severity']}] {r['description'][:70]}")
+        emoji = sev_emoji.get(r["severity"], "⚫")
+        lines.append(f"{emoji} `#{r['id']}` *{r['severity']}* — {r['description'][:70]}")
     client.post_message("\n".join(lines))

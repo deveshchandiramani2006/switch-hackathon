@@ -65,19 +65,12 @@ def handle_message(client, payload: dict):
     elif t.startswith("track:"):
         track_keyword(client, clean.split(":", 1)[1].strip(), tenant_id)
     else:
-        client.post_message(
-            "*SEO Commands:*\n"
-            "- `@GeoSEOAgent run now` — run keyword rank check\n"
-            "- `@GeoSEOAgent trending` — top keywords by volume\n"
-            "- `@GeoSEOAgent report` — SEO summary\n"
-            "- `@GeoSEOAgent queue` — content queue\n"
-            "- `@GeoSEOAgent track: keyword` — add keyword\n\n"
-            "*GEO Commands (Generative Engine Optimization):*\n"
-            "- `@GeoSEOAgent geo run` — check AI citability for all keywords\n"
-            "- `@GeoSEOAgent geo report` — citation rates per keyword\n"
-            "- `@GeoSEOAgent geo check: keyword` — score one keyword now\n"
-            "- `@GeoSEOAgent geo tips: keyword` — get AI rewrite recommendations"
-        )
+        from app.Services.BlockBuilder import _section
+        client.post_blocks([
+            _section("*GeoSEOAgent — SEO & AI citability*\n"
+                     "`track: keyword`  `run now`  `trending`  `report`  `queue`\n"
+                     "`geo check: keyword`  `geo tips: keyword`  `geo run`  `geo report`")
+        ], fallback_text="GeoSEOAgent commands")
 
 
 def handle_post_published(client, text: str, tenant_id: str):
@@ -95,7 +88,7 @@ def handle_post_published(client, text: str, tenant_id: str):
                 "UPDATE keyword_tracking SET published_url=%s WHERE LOWER(keyword)=LOWER(%s) AND tenant_id=%s",
                 (url, keyword, tenant_id)
             )
-        client.post_message(f"Now tracking rankings for: *{keyword}*\nPublished URL: {url}")
+        client.post_message(f"📡 Tracking *{keyword}* — {url}")
 
 
 def show_trending(client, tenant_id: str):
@@ -106,12 +99,13 @@ def show_trending(client, tenant_id: str):
         )
         rows = cur.fetchall()
     if not rows:
-        client.post_message("No keywords tracked yet. Run `@GeoSEOAgent run now`")
+        client.post_message("No keywords tracked yet. Use `track: keyword` to add one.")
         return
-    lines = ["*Tracked keywords:*\n"]
+    lines = [f"*Keywords ({len(rows)})*\n"]
     for r in rows:
-        rank_str = f"rank #{r['current_rank']}" if r["current_rank"] else "not ranked"
-        lines.append(f"- *{r['keyword']}* -- {r['volume'] or '?'}/mo -- {rank_str}")
+        rank_str = f"rank #{r['current_rank']}" if r["current_rank"] else "unranked"
+        vol = r["volume"] or "?"
+        lines.append(f"🔍 *{r['keyword']}* — {vol}/mo · {rank_str}")
     client.post_message("\n".join(lines))
 
 
@@ -125,7 +119,7 @@ def show_report(client, tenant_id: str):
         )
         briefs = cur.fetchone()["briefs"]
     client.post_message(
-        f"*SEO Report*\nTracked keywords: {total}\nContent queue: {briefs} briefs pending"
+        f"*SEO*  🔍 {total} keywords tracked · ✍️ {briefs} briefs pending"
     )
 
 
@@ -139,9 +133,10 @@ def show_queue(client, tenant_id: str):
     if not rows:
         client.post_message("Content queue is empty.")
         return
-    lines = ["*Content queue:*\n"]
+    lines = [f"*Content queue ({len(rows)})*\n"]
     for r in rows:
-        lines.append(f"- #{r['id']} | {r['keyword']} | {r['status']}")
+        status_emoji = "✅" if r["status"] == "published" else ("✍️" if "draft" in r["status"] else "⏳")
+        lines.append(f"{status_emoji} `#{r['id']}` *{r['keyword']}* — _{r['status']}_")
     client.post_message("\n".join(lines))
 
 
@@ -153,7 +148,7 @@ def track_keyword(client, keyword: str, tenant_id: str):
         )
         row = cur.fetchone()
     if row:
-        client.post_message(f"Now tracking: *{keyword}*")
+        client.post_message(f"✅ Now tracking: *{keyword}*")
     else:
         client.post_message(f"Already tracking: *{keyword}*")
 
@@ -178,12 +173,14 @@ def show_geo_report(client, tenant_id: str):
         )
         rows = cur.fetchall()
     if not rows:
-        client.post_message("No GEO data yet. Run `@GeoSEOAgent geo run` first.")
+        client.post_message("No GEO data yet. Run `geo run` first.")
         return
-    lines = ["*GEO Report — AI citability scores:*\n"]
+    lines = [f"*GEO Report ({len(rows)} keywords)*\n"]
     for r in rows:
+        score = r["avg_score"] or 0
+        emoji = "🟢" if score >= 7 else ("🟡" if score >= 4 else "🔴")
         cited_str = f"{r['cited_count']}/{r['checks']} cited"
-        lines.append(f"- *{r['keyword']}* — score {r['avg_score']}/10 — {cited_str}")
+        lines.append(f"{emoji} *{r['keyword']}* — {score}/10 · {cited_str}")
     client.post_message("\n".join(lines))
 
 
@@ -215,5 +212,5 @@ def geo_tips_single(client, keyword: str, tenant_id: str):
     score_result = score_content_for_geo(keyword, placeholder)
     recs = generate_geo_recommendations(keyword, score_result)
     client.post_message(
-        f"*GEO tips for \"{keyword}\" (score {score_result.get('score', '?')}/10):*\n{recs}"
+        f"💡 *GEO tips for \"{keyword}\"* (score {score_result.get('score', '?')}/10)\n\n{recs}"
     )

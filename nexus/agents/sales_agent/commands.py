@@ -125,8 +125,7 @@ def cmd_follow_up(client, text: str, sender: str, tenant_id: str):
         f"Keep it under 4 sentences. Friendly but professional tone."
     )
     client.post_message(
-        f"*Follow-up draft for {lead['name']}:*\n\n{draft}\n\n"
-        "_Reply 'send' to approve or edit above_"
+        f"💬 *Follow-up for {lead['name']}*\n\n{draft}"
     )
 
 
@@ -180,7 +179,7 @@ def cmd_won(client, text: str, sender: str, tenant_id: str):
         )
         row = cur.fetchone()
     if row:
-        client.post_message(f"Deal won: *{row['name']}* -- {format_value(row['deal_value'])}")
+        client.post_message(f"🏆 Deal won: *{row['name']}* — {format_value(row['deal_value'])}")
         # Cross-agent signals: notify CSAgent and FinanceAgent
         won_name   = row["name"].replace(" ", "_")
         won_amount = row["deal_value"]
@@ -206,7 +205,7 @@ def cmd_lost(client, text: str, sender: str, tenant_id: str):
             "WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s)",
             (f"Lost: {reason}", tenant_id, f"%{name}%")
         )
-    client.post_message(f"Deal lost: {name} -- reason: {reason}")
+    client.post_message(f"❌ Deal lost: *{name}* — {reason}")
 
 
 def cmd_set_commitment(client, text: str, sender: str, tenant_id: str):
@@ -220,9 +219,7 @@ def cmd_set_commitment(client, text: str, sender: str, tenant_id: str):
             (tenant_id, None, raw, text)
         )
         cid = cur.fetchone()["id"]
-    client.post_message(
-        f"Commitment tracked (#{cid})\n{raw}\n_Set manually by @{sender}_"
-    )
+    client.post_message(f"📌 Commitment tracked (#{cid}) — {raw}")
 
 
 def cmd_set_commitment_data(client, data: dict, sender: str, tenant_id: str):
@@ -240,9 +237,7 @@ def cmd_set_commitment_data(client, data: dict, sender: str, tenant_id: str):
             (tenant_id, data["person"], text_summary, deadline, text_summary)
         )
         cid = cur.fetchone()["id"]
-    client.post_message(
-        f"Commitment tracked (#{cid})\n{text_summary}\n_Tracked by @{sender}_"
-    )
+    client.post_message(f"📌 Commitment tracked (#{cid}) — {text_summary}")
 
 
 def cmd_stale_leads(client, sender: str, tenant_id: str):
@@ -258,12 +253,12 @@ def cmd_stale_leads(client, sender: str, tenant_id: str):
         )
         rows = cur.fetchall()
     if not rows:
-        client.post_message("No stale leads.")
+        client.post_message("✅ No stale leads.")
         return
-    lines = ["*Stale leads (not touched > 7 days):*\n"]
+    lines = [f"*Stale leads ({len(rows)} · untouched 7+ days)*\n"]
     for r in rows:
         days = (datetime.now() - r["last_touched_at"]).days
-        lines.append(f"- *{r['name']}* | {r['stage']} | {format_value(r['deal_value'])} | {days}d ago")
+        lines.append(f"🕰️ *{r['name']}* — {r['stage']} · {format_value(r['deal_value'])} · {days}d ago")
     client.post_message("\n".join(lines))
 
 
@@ -286,16 +281,18 @@ def cmd_lead_card(client, text: str, sender: str, tenant_id: str):
     if not lead:
         client.post_message(f"Lead '{name}' not found.")
         return
+    stage_emoji = {
+        "Prospect": "🔵", "Qualified": "🟡", "Proposal": "🟠",
+        "Negotiation": "🔸", "Closed-Won": "🏆", "Closed-Lost": "❌"
+    }.get(lead["stage"], "⚫")
     lines = [
-        f"*{lead['name']}* -- {lead['role']}",
-        f"City: {lead['city']} | Industry: {lead['industry']}",
-        f"Deal: {format_value(lead['deal_value'])} | Stage: {lead['stage']}",
-        f"Rep: {lead['rep_slack_user']}",
+        f"{stage_emoji} *{lead['name']}* — {lead['role']} · {lead['city']}",
+        f"_{lead['industry']}_ · {format_value(lead['deal_value'])} · stage: {lead['stage']}",
     ]
     if commits:
-        lines.append("\n*Recent commitments:*")
+        lines.append("\n*Commitments:*")
         for c in commits:
-            lines.append(f"- {c['commitment_text']} (status: {c['status']})")
+            lines.append(f"📌 {c['commitment_text']} _{c['status']}_")
     client.post_message("\n".join(lines))
 
 

@@ -83,19 +83,14 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     elif t.startswith("knowledge:"):
         _cmd_knowledge(client, text.split(":", 1)[1].strip(), tenant_id)
     else:
-        client.post_message(
-            "Commands:\n"
-            "- `@SalesAgent new lead` — guided form\n"
-            "- `@SalesAgent new lead: Name, Role, City, Industry, Value` — quick add\n"
-            "- `@SalesAgent pipeline`\n"
-            "- `@SalesAgent lead: Name`\n"
-            "- `@SalesAgent follow up: Name`\n"
-            "- `@SalesAgent format` — guided form\n"
-            "- `@SalesAgent won: Name` / `lost: Name -- reason: ...`\n"
-            "- `@SalesAgent set commitment` — guided form\n"
-            "- `@SalesAgent stale leads`\n"
-            "- `@SalesAgent patterns` / `memory` / `knowledge: keyword`"
-        )
+        from app.Services.BlockBuilder import _section
+        client.post_blocks([
+            _section("*SalesAgent — pipeline & leads*\n"
+                     "`new lead` (guided) or `new lead: Name, Role, City, Industry, Value`\n"
+                     "`pipeline`  `lead: Name`  `follow up: Name`  `stale leads`\n"
+                     "`won: Name`  `lost: Name -- reason: X`  `set commitment`\n"
+                     "`patterns`  `memory`  `knowledge: topic`")
+        ], fallback_text="SalesAgent commands")
 
 
 def _handle_geo_signal(client, text: str, tenant_id: str):
@@ -128,9 +123,8 @@ def _handle_geo_signal(client, text: str, tenant_id: str):
             pass
 
     client.post_message(
-        f"*Geo opportunity:* {keyword} trending +{trend}% in {geo}.\n"
-        f"Volume: {volume}/mo | {lead_count} leads in that area.\n"
-        f"Want me to draft geo-targeted outreach? Reply `@SalesAgent follow up: <lead name>`"
+        f"📈 *{keyword}* trending +{trend}% in {geo} · {volume}/mo\n"
+        f"{lead_count} leads in that area — `follow up: Name` to draft outreach"
     )
 
 
@@ -141,7 +135,7 @@ def _cmd_patterns(client, tenant_id: str):
     if not patterns:
         client.post_message("No patterns detected yet.")
         return
-    lines = ["*SalesAgent learned patterns:*\n"]
+    lines = ["*Patterns learned:*\n"]
     for p in patterns[:5]:
         lines.append(f"- {p['description']} (seen {p['occurrences']}x, confidence {p['confidence']:.0%})")
     client.post_message("\n".join(lines))
@@ -154,7 +148,7 @@ def _cmd_memory(client, tenant_id: str):
     if not events:
         client.post_message("No memory events recorded yet.")
         return
-    lines = ["*SalesAgent recent memory:*\n"]
+    lines = ["*Recent memory:*\n"]
     for ev in events[:5]:
         lines.append(f"- [{ev['event_type']}] {str(ev['context'] or '')[:80]}")
     client.post_message("\n".join(lines))
