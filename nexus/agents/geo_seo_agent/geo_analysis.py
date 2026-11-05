@@ -229,7 +229,7 @@ def run_geo_cycle(client, tenant_id: str = "default"):
             if c.get("cited") and not c.get("skipped")
         ]
         cited_str = ", ".join(cited_engines) if cited_engines else "none"
-        summaries.append(f"- *{kw}* — AI score {score}/10 — cited by: {cited_str}")
+        summaries.append(f"• *{kw}* · AI score {score}/10 · cited by: {cited_str}")
 
     client.post_message(
         "*GEO cycle complete*\n" + "\n".join(summaries)

@@ -95,7 +95,7 @@ def ping_service(client, url: str):
             f"{emoji} `{url}` — HTTP {resp.status_code} · {resp.elapsed.total_seconds()*1000:.0f}ms"
         )
     except Exception as e:
-        client.post_message(f"🔴 `{url}` — unreachable: {e}")
+        client.post_message(f"🔴 `{url}` unreachable: {e}")
 
 
 def add_service(client, text: str, tenant_id: str):

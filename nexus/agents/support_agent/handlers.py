@@ -183,7 +183,7 @@ def show_status(client, tenant_id: str):
     lines = [f"*Open bugs ({len(rows)})*\n"]
     for r in rows:
         emoji = sev_emoji.get(r["severity"], "⚫")
-        lines.append(f"{emoji} `#{r['id']}` *{r['severity']}* — {r['description'][:60]}")
+        lines.append(f"{emoji} `#{r['id']}` *{r['severity']}* {r['description'][:60]}")
     client.post_message("\n".join(lines))
 
 
@@ -231,9 +231,9 @@ def filter_bugs(client, filter_str: str, tenant_id: str):
         return
 
     sev_emoji = {"P0": "🚨", "P1": "🔴", "P2": "🟡", "P3": "🔵"}
-    label = f"{status.title()} bugs" + (f" — {sev}" if sev else "")
+    label = f"{status.title()} bugs" + (f" ({sev})" if sev else "")
     lines = [f"*{label} ({len(rows)})*\n"]
     for r in rows:
         emoji = sev_emoji.get(r["severity"], "⚫")
-        lines.append(f"{emoji} `#{r['id']}` *{r['severity']}* — {r['description'][:70]}")
+        lines.append(f"{emoji} `#{r['id']}` *{r['severity']}* {r['description'][:70]}")
     client.post_message("\n".join(lines))

@@ -219,7 +219,7 @@ def cmd_set_commitment(client, text: str, sender: str, tenant_id: str):
             (tenant_id, None, raw, text)
         )
         cid = cur.fetchone()["id"]
-    client.post_message(f"📌 Commitment tracked (#{cid}) — {raw}")
+    client.post_message(f"📌 Commitment tracked (#{cid}) · {raw}")
 
 
 def cmd_set_commitment_data(client, data: dict, sender: str, tenant_id: str):
@@ -237,7 +237,7 @@ def cmd_set_commitment_data(client, data: dict, sender: str, tenant_id: str):
             (tenant_id, data["person"], text_summary, deadline, text_summary)
         )
         cid = cur.fetchone()["id"]
-    client.post_message(f"📌 Commitment tracked (#{cid}) — {text_summary}")
+    client.post_message(f"📌 Commitment tracked (#{cid}) · {text_summary}")
 
 
 def cmd_stale_leads(client, sender: str, tenant_id: str):

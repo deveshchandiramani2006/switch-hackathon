@@ -88,7 +88,7 @@ def handle_message(client, payload: dict):
         from app.Services.BlockBuilder import _section
         client.post_blocks([
             _section("*BlogAgent: Content Drafts*\n"
-                     "1. `draft: topic` or `draft` — guided form\n"
+                     "1. `draft: topic` or `draft` (guided form)\n"
                      "2. `queue`\n"
                      "3. `preview: #42`\n"
                      "4. `approve #42` or `approve #42 -- edit: change CTA`\n"
@@ -190,7 +190,7 @@ def approve_draft_by_id(client, draft_id: int, sender: str, tenant_id: str, with
                 "UPDATE content_queue SET status='published', published_url=%s, published_at=NOW() WHERE id=%s",
                 (url, draft_id)
             )
-        client.post_message(f"✅ Published — {url}")
+        client.post_message(f"✅ Published: {url}")
         client.safe_signal("GeoSEOAgent", f"POST_PUBLISHED: keyword={draft['keyword'].replace(' ', '_')} url={url}")
     else:
         with db_cursor() as cur:

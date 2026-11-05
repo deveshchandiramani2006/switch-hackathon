@@ -187,7 +187,7 @@ def _cmd_approve_invoice(client, text: str, sender: str, tenant_id: str):
 
     if row:
         client.post_message(
-            f"✅ Invoice #{row['id']:03d} approved — *{row['vendor']}* {_fmt_v(row['amount'])}"
+            f"✅ Invoice #{row['id']:03d} approved · *{row['vendor']}* {_fmt_v(row['amount'])}"
         )
     else:
         client.post_message(f"Invoice '{ref}' not found.")
@@ -212,7 +212,7 @@ def _cmd_reject_invoice(client, text: str, sender: str, tenant_id: str):
         row = cur.fetchone()
 
     if row:
-        client.post_message(f"Invoice-{row['id']:03d} (*{row['vendor']}*) rejected — reason: {reason}")
+        client.post_message(f"Invoice-{row['id']:03d} (*{row['vendor']}*) rejected, reason: {reason}")
     else:
         client.post_message(f"Invoice '{ref}' not found.")
 
@@ -234,7 +234,7 @@ def _cmd_budget_status(client, name: str, tenant_id: str):
     emoji = "✅" if pct < 75 else ("⚠️" if pct < 90 else "🚨")
     from app.Services.BlockBuilder import _section, _context
     client.post_blocks([
-        _section(f"{emoji} *{budget['name']}* — {pct}% burned"),
+        _section(f"{emoji} *{budget['name']}* · {pct}% burned"),
         _context(f"Spent: {_fmt_v(budget['spent'])}", f"Remaining: {_fmt_v(rem)}", f"of {_fmt_v(budget['allocated'])}"),
     ], fallback_text=f"Budget {budget['name']}: {pct}% burned")
 
@@ -264,7 +264,7 @@ def _cmd_expense(client, text: str, sender: str, tenant_id: str):
         exp_id = cur.fetchone()["id"]
 
     client.post_message(
-        f"⏳ Expense #{exp_id} logged — *{submitter}* {_fmt_v(amount)} · {category}"
+        f"⏳ Expense #{exp_id} logged · *{submitter}* {_fmt_v(amount)} · {category}"
     )
 
 
@@ -282,9 +282,9 @@ def _cmd_expenses_pending(client, tenant_id: str):
         return
 
     total = sum(r["amount"] for r in rows)
-    lines = [f"*Pending expenses — {len(rows)} claims · {_fmt_v(total)} total*\n"]
+    lines = [f"*Pending expenses: {len(rows)} claims · {_fmt_v(total)} total*\n"]
     for r in rows:
-        lines.append(f"⏳ *{r['submitter']}* — {_fmt_v(r['amount'])} · {r['category']}")
+        lines.append(f"⏳ *{r['submitter']}* · {_fmt_v(r['amount'])} · {r['category']}")
     client.post_message("\n".join(lines))
 
 
@@ -305,7 +305,7 @@ def _cmd_overdue(client, tenant_id: str):
     lines = [f"*Overdue invoices ({len(rows)})*\n"]
     for r in rows:
         days_over = (date.today() - r["due_date"]).days
-        lines.append(f"🚨 *{r['vendor']}* — {_fmt_v(r['amount'])} · {days_over}d overdue")
+        lines.append(f"🚨 *{r['vendor']}* · {_fmt_v(r['amount'])} · {days_over}d overdue")
     client.post_message("\n".join(lines))
 
 
@@ -438,7 +438,7 @@ def _handle_deal_won(client, text: str):
         inv_id = cur.fetchone()["id"]
 
     client.post_message(
-        f"💰 *{customer}* — {_fmt_v(amount)} revenue logged (invoice #{inv_id:03d})"
+        f"💰 *{customer}* · {_fmt_v(amount)} revenue logged (invoice #{inv_id:03d})"
     )
     logger.info(f"FinanceAgent logged revenue from DEAL_WON: {customer} {amount}")
 
@@ -484,7 +484,7 @@ def cmd_expense_data(client, data: dict, sender: str, tenant_id: str):
         )
         exp_id = cur.fetchone()["id"]
     client.post_message(
-        f"⏳ Expense #{exp_id} logged — *{submitter}* {_fmt_v(amount)} · {data['category']}"
+        f"⏳ Expense #{exp_id} logged · *{submitter}* {_fmt_v(amount)} · {data['category']}"
     )
 
 
@@ -498,7 +498,7 @@ def cmd_reject_invoice_data(client, data: dict, sender: str, tenant_id: str):
         )
         row = cur.fetchone()
     if row:
-        client.post_message(f"Invoice-{row['id']:03d} (*{row['vendor']}*) rejected — reason: {reason}")
+        client.post_message(f"Invoice-{row['id']:03d} (*{row['vendor']}*) rejected, reason: {reason}")
     else:
         client.post_message(f"Invoice '{data['invoice_id']}' not found.")
 

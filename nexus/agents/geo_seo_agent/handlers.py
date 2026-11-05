@@ -95,7 +95,7 @@ def handle_post_published(client, text: str, tenant_id: str):
                 "UPDATE keyword_tracking SET published_url=%s WHERE LOWER(keyword)=LOWER(%s) AND tenant_id=%s",
                 (url, keyword, tenant_id)
             )
-        client.post_message(f"📡 Tracking *{keyword}* — {url}")
+        client.post_message(f"📡 Tracking *{keyword}*: {url}")
 
 
 def show_trending(client, tenant_id: str):
@@ -112,7 +112,7 @@ def show_trending(client, tenant_id: str):
     for r in rows:
         rank_str = f"rank #{r['current_rank']}" if r["current_rank"] else "unranked"
         vol = r["volume"] or "?"
-        lines.append(f"🔍 *{r['keyword']}* — {vol}/mo · {rank_str}")
+        lines.append(f"🔍 *{r['keyword']}* · {vol}/mo · {rank_str}")
     client.post_message("\n".join(lines))
 
 
@@ -143,7 +143,7 @@ def show_queue(client, tenant_id: str):
     lines = [f"*Content queue ({len(rows)})*\n"]
     for r in rows:
         status_emoji = "✅" if r["status"] == "published" else ("✍️" if "draft" in r["status"] else "⏳")
-        lines.append(f"{status_emoji} `#{r['id']}` *{r['keyword']}* — _{r['status']}_")
+        lines.append(f"{status_emoji} `#{r['id']}` *{r['keyword']}* _{r['status']}_")
     client.post_message("\n".join(lines))
 
 
@@ -187,7 +187,7 @@ def show_geo_report(client, tenant_id: str):
         score = r["avg_score"] or 0
         emoji = "🟢" if score >= 7 else ("🟡" if score >= 4 else "🔴")
         cited_str = f"{r['cited_count']}/{r['checks']} cited"
-        lines.append(f"{emoji} *{r['keyword']}* — {score}/10 · {cited_str}")
+        lines.append(f"{emoji} *{r['keyword']}* · {score}/10 · {cited_str}")
     client.post_message("\n".join(lines))
 
 
