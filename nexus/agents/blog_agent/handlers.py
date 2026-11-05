@@ -88,13 +88,13 @@ def handle_message(client, payload: dict):
         from app.Services.BlockBuilder import _section
         client.post_blocks([
             _section("*BlogAgent: Content Drafts*\n"
-                     "• `draft: topic` or `draft` — guided form\n"
-                     "• `queue`\n"
-                     "• `preview: #42`\n"
-                     "• `approve #42` or `approve #42 -- edit: change CTA`\n"
-                     "• `reject #42 -- reason: too promotional`\n"
-                     "• `delegate to @name`\n"
-                     "• `patterns` / `memory` / `knowledge: topic`")
+                     "1. `draft: topic` or `draft` — guided form\n"
+                     "2. `queue`\n"
+                     "3. `preview: #42`\n"
+                     "4. `approve #42` or `approve #42 -- edit: change CTA`\n"
+                     "5. `reject #42 -- reason: too promotional`\n"
+                     "6. `delegate to @name`\n"
+                     "7. `patterns` / `memory` / `knowledge: topic`")
         ], fallback_text="BlogAgent commands")
 
 

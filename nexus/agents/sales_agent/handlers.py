@@ -86,16 +86,16 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
         from app.Services.BlockBuilder import _section
         client.post_blocks([
             _section("*SalesAgent: Pipeline & Leads*\n"
-                     "• `new lead` — guided form\n"
-                     "• `new lead: Name, Role, City, Industry, Value`\n"
-                     "• `pipeline`\n"
-                     "• `lead: Name`\n"
-                     "• `follow up: Name`\n"
-                     "• `won: Name`\n"
-                     "• `lost: Name -- reason: budget`\n"
-                     "• `stale leads`\n"
-                     "• `set commitment`\n"
-                     "• `patterns` / `memory` / `knowledge: topic`")
+                     "1. `new lead` — guided form\n"
+                     "2. `new lead: Name, Role, City, Industry, Value`\n"
+                     "3. `pipeline`\n"
+                     "4. `lead: Name`\n"
+                     "5. `follow up: Name`\n"
+                     "6. `won: Name`\n"
+                     "7. `lost: Name -- reason: budget`\n"
+                     "8. `stale leads`\n"
+                     "9. `set commitment`\n"
+                     "10. `patterns` / `memory` / `knowledge: topic`")
         ], fallback_text="SalesAgent commands")
 
 

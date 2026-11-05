@@ -94,14 +94,14 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
         from app.Services.BlockBuilder import _section
         client.post_blocks([
             _section("*CSAgent: Customer Success*\n"
-                     "• `add customer: Name, Rs500K, renewal: 2027-03-31`\n"
-                     "• `health: Name`\n"
-                     "• `at-risk`\n"
-                     "• `renewals` or `renewals: 60`\n"
-                     "• `nps: Name, score: 7, note: feedback`\n"
-                     "• `expansion: Name`\n"
-                     "• `qbr: Name`\n"
-                     "• `weekly report`")
+                     "1. `add customer: Name, Rs500K, renewal: 2027-03-31`\n"
+                     "2. `health: Name`\n"
+                     "3. `at-risk`\n"
+                     "4. `renewals` or `renewals: 60`\n"
+                     "5. `nps: Name, score: 7, note: feedback`\n"
+                     "6. `expansion: Name`\n"
+                     "7. `qbr: Name`\n"
+                     "8. `weekly report`")
         ], fallback_text="CSAgent commands")
 
 

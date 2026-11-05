@@ -79,11 +79,11 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
         from app.Services.BlockBuilder import _section
         client.post_blocks([
             _section("*SupportAgent: Bug Triage*\n"
-                     "• `bug: description, severity: P1`\n"
-                     "• `status`\n"
-                     "• `close: #42`\n"
-                     "• `bugs: open P0`\n"
-                     "• `patterns` / `memory` / `knowledge: topic`")
+                     "1. `bug: description, severity: P1`\n"
+                     "2. `status`\n"
+                     "3. `close: #42`\n"
+                     "4. `bugs: open P0`\n"
+                     "5. `patterns` / `memory` / `knowledge: topic`")
         ], fallback_text="SupportAgent commands")
 
 
