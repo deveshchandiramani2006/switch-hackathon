@@ -34,9 +34,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
-      SWITCH_API_KEY: ${SWITCH_API_KEY_SALES}
-      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_SALES}
-      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_SALES}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID_SALES:-}
+      SWITCH_API_KEY: ${SWITCH_API_KEY_SALES:-}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_SALES:-}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_SALES:-}
       AGENT_NAME: SalesAgent
     depends_on:
       postgres:
@@ -50,9 +53,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
-      SWITCH_API_KEY: ${SWITCH_API_KEY_SUPPORT}
-      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_SUPPORT}
-      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_SUPPORT}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID_SUPPORT:-}
+      SWITCH_API_KEY: ${SWITCH_API_KEY_SUPPORT:-}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_SUPPORT:-}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_SUPPORT:-}
       AGENT_NAME: SupportAgent
     depends_on:
       postgres:
@@ -66,9 +72,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
-      SWITCH_API_KEY: ${SWITCH_API_KEY_GEOSEO}
-      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_GEOSEO}
-      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_GROWTH}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID_GROWTH:-}
+      SWITCH_API_KEY: ${SWITCH_API_KEY_GEOSEO:-}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_GEOSEO:-}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_GROWTH:-}
       AGENT_NAME: GeoSEOAgent
     depends_on:
       postgres:
@@ -82,9 +91,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
-      SWITCH_API_KEY: ${SWITCH_API_KEY_BLOG}
-      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_BLOG}
-      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_CONTENT}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID_CONTENT:-}
+      SWITCH_API_KEY: ${SWITCH_API_KEY_BLOG:-}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_BLOG:-}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_CONTENT:-}
       AGENT_NAME: BlogAgent
     depends_on:
       postgres:
@@ -98,9 +110,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
-      SWITCH_API_KEY: ${SWITCH_API_KEY_INFRA}
-      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_INFRA}
-      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_DEVOPS}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID_DEVOPS:-}
+      SWITCH_API_KEY: ${SWITCH_API_KEY_INFRA:-}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_INFRA:-}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_DEVOPS:-}
       AGENT_NAME: InfraAgent
     depends_on:
       postgres:
@@ -114,9 +129,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
-      SWITCH_API_KEY: ${SWITCH_API_KEY_CS}
-      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_CS}
-      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_CS}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID_CS:-}
+      SWITCH_API_KEY: ${SWITCH_API_KEY_CS:-}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_CS:-}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_CS:-}
       AGENT_NAME: CSAgent
     depends_on:
       postgres:
@@ -130,9 +148,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://nexus:nexus_dev@postgres:5432/nexus
-      SWITCH_API_KEY: ${SWITCH_API_KEY_FINANCE}
-      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_FINANCE}
-      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_FINANCE}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID_FINANCE:-}
+      SWITCH_API_KEY: ${SWITCH_API_KEY_FINANCE:-}
+      SWITCH_AGENT_ID: ${SWITCH_AGENT_ID_FINANCE:-}
+      SWITCH_ROOM_ID: ${SWITCH_ROOM_ID_FINANCE:-}
       AGENT_NAME: FinanceAgent
     depends_on:
       postgres:
