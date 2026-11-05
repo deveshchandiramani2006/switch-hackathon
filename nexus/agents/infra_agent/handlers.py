@@ -55,8 +55,12 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*InfraAgent — service monitoring*\n"
-                     "`status`  `ping: url`  `add: name -> https://url`  `add` (guided)  `jobs`")
+            _section("*InfraAgent — Service Monitoring*\n"
+                     "• `status`\n"
+                     "• `ping: https://url`\n"
+                     "• `add: name -> https://url`\n"
+                     "• `add` — guided form\n"
+                     "• `jobs`")
         ], fallback_text="InfraAgent commands")
 
 

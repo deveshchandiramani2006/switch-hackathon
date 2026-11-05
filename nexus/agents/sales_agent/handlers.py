@@ -85,11 +85,17 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*SalesAgent — pipeline & leads*\n"
-                     "`new lead` (guided) or `new lead: Name, Role, City, Industry, Value`\n"
-                     "`pipeline`  `lead: Name`  `follow up: Name`  `stale leads`\n"
-                     "`won: Name`  `lost: Name -- reason: X`  `set commitment`\n"
-                     "`patterns`  `memory`  `knowledge: topic`")
+            _section("*SalesAgent — Pipeline & Leads*\n"
+                     "• `new lead` — guided form\n"
+                     "• `new lead: Name, Role, City, Industry, Value`\n"
+                     "• `pipeline`\n"
+                     "• `lead: Name`\n"
+                     "• `follow up: Name`\n"
+                     "• `won: Name`\n"
+                     "• `lost: Name -- reason: budget`\n"
+                     "• `stale leads`\n"
+                     "• `set commitment`\n"
+                     "• `patterns` / `memory` / `knowledge: topic`")
         ], fallback_text="SalesAgent commands")
 
 

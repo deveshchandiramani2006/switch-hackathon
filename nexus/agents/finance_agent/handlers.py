@@ -88,11 +88,17 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*FinanceAgent — invoices & expenses*\n"
-                     "`invoice: Vendor, Rs50K, due: 2026-11-15, category: software`  `invoices`\n"
-                     "`approve: invoice-042`  `reject: invoice-042, reason: X`  `budget: category`\n"
-                     "`expense: Name, Rs3200, travel, 2026-11-04`  `expenses pending`  `overdue`\n"
-                     "`weekly report`  `forecast`")
+            _section("*FinanceAgent — Invoices & Expenses*\n"
+                     "• `invoice: Vendor, Rs50K, due: 2026-11-15, category: software`\n"
+                     "• `invoices`\n"
+                     "• `approve: invoice-042`\n"
+                     "• `reject: invoice-042, reason: duplicate`\n"
+                     "• `budget: category name`\n"
+                     "• `expense: Name, Rs3200, travel, 2026-11-04`\n"
+                     "• `expenses pending`\n"
+                     "• `overdue`\n"
+                     "• `weekly report`\n"
+                     "• `forecast`")
         ], fallback_text="FinanceAgent commands")
 
 

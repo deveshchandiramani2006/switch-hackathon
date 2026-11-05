@@ -87,10 +87,14 @@ def handle_message(client, payload: dict):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*BlogAgent — content drafts*\n"
-                     "`draft: topic` or `draft` (guided)  `queue`  `preview: #id`\n"
-                     "`approve #42` or `approve #42 -- edit: change CTA`  `reject #42`\n"
-                     "`delegate to @name`  `patterns`  `memory`  `knowledge: topic`")
+            _section("*BlogAgent — Content Drafts*\n"
+                     "• `draft: topic` or `draft` — guided form\n"
+                     "• `queue`\n"
+                     "• `preview: #42`\n"
+                     "• `approve #42` or `approve #42 -- edit: change CTA`\n"
+                     "• `reject #42 -- reason: too promotional`\n"
+                     "• `delegate to @name`\n"
+                     "• `patterns` / `memory` / `knowledge: topic`")
         ], fallback_text="BlogAgent commands")
 
 

@@ -67,9 +67,16 @@ def handle_message(client, payload: dict):
     else:
         from app.Services.BlockBuilder import _section
         client.post_blocks([
-            _section("*GeoSEOAgent — SEO & AI citability*\n"
-                     "`track: keyword`  `run now`  `trending`  `report`  `queue`\n"
-                     "`geo check: keyword`  `geo tips: keyword`  `geo run`  `geo report`")
+            _section("*GeoSEOAgent — SEO & AI Citability*\n"
+                     "• `track: keyword`\n"
+                     "• `run now`\n"
+                     "• `trending`\n"
+                     "• `report`\n"
+                     "• `queue`\n"
+                     "• `geo check: keyword`\n"
+                     "• `geo tips: keyword`\n"
+                     "• `geo run`\n"
+                     "• `geo report`")
         ], fallback_text="GeoSEOAgent commands")
 
 
