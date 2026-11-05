@@ -2,6 +2,7 @@ import os
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from .analysis import run_analysis_cycle
+from .geo_analysis import run_geo_cycle
 from app.Services.DigestService import post_morning_digest
 from app.Services.ProactiveService import run_proactive_check
 
@@ -32,6 +33,14 @@ def start_geo_scheduler(client):
         "interval",
         hours=6,
         id="geoseo_proactive"
+    )
+
+    geo_hours = int(os.getenv("GEO_CHECK_INTERVAL_HOURS", "12"))
+    scheduler.add_job(
+        lambda: run_geo_cycle(client, client.tenant_id),
+        "interval",
+        hours=geo_hours,
+        id="geo_cycle"
     )
 
     scheduler.add_job(

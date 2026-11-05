@@ -142,11 +142,10 @@ def triage_bug(client, description: str, sender: str, tenant_id: str):
         )
         bug_id = cur.fetchone()["id"]
 
-    emoji = {"P0": "[P0-CRITICAL]", "P1": "[P1]", "P2": "[P2]", "P3": "[P3]"}.get(sev, "[P2]")
-    client.post_message(
-        f"{emoji} *Bug #{bug_id} -- {sev}*\n"
-        f"{data.get('summary', description)}\n"
-        f"Reported by: @{sender}"
+    from app.Services.BlockBuilder import bug_logged
+    client.post_blocks(
+        bug_logged(bug_id, data.get("summary", description), sev),
+        fallback_text=f"Bug #{bug_id} logged ({sev})"
     )
 
     # Fire P1_BREACH signal to CSAgent for P0/P1 bugs

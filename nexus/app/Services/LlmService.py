@@ -65,17 +65,17 @@ _breaker = _CircuitBreaker()
 
 CLOUD_AGENTS = {"sales", "support", "geo_seo"}
 
+_DEFAULT_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:latest")
+
 _DEFAULT_PROVIDER_BY_AGENT = {
-    "sales":    ("anthropic", os.getenv("LLM_MODEL", "claude-sonnet-4-6")),
-    "support":  ("anthropic", os.getenv("LLM_MODEL", "claude-sonnet-4-6")),
-    "geo_seo":  ("anthropic", os.getenv("LLM_MODEL", "claude-sonnet-4-6")),
-    "blog":     (os.getenv("BLOG_LLM_PROVIDER", "ollama"),
-                 os.getenv("BLOG_LLM_MODEL", "mistral")),
-    "infra":    (os.getenv("INFRA_LLM_PROVIDER", "ollama"),
-                 os.getenv("INFRA_LLM_MODEL", "phi3")),
-    "cs":       ("anthropic", os.getenv("LLM_MODEL", "claude-sonnet-4-6")),
-    "finance":  ("anthropic", os.getenv("LLM_MODEL", "claude-sonnet-4-6")),
-    "default":  ("anthropic", os.getenv("LLM_MODEL", "claude-sonnet-4-6")),
+    "sales":    (os.getenv("SALES_LLM_PROVIDER", "ollama"),   os.getenv("SALES_LLM_MODEL",   _DEFAULT_OLLAMA_MODEL)),
+    "support":  (os.getenv("SUPPORT_LLM_PROVIDER", "ollama"), os.getenv("SUPPORT_LLM_MODEL", _DEFAULT_OLLAMA_MODEL)),
+    "geo_seo":  (os.getenv("GEOSEO_LLM_PROVIDER", "ollama"),  os.getenv("GEOSEO_LLM_MODEL",  _DEFAULT_OLLAMA_MODEL)),
+    "blog":     (os.getenv("BLOG_LLM_PROVIDER", "ollama"),    os.getenv("BLOG_LLM_MODEL",    _DEFAULT_OLLAMA_MODEL)),
+    "infra":    (os.getenv("INFRA_LLM_PROVIDER", "ollama"),   os.getenv("INFRA_LLM_MODEL",   _DEFAULT_OLLAMA_MODEL)),
+    "cs":       (os.getenv("CS_LLM_PROVIDER", "ollama"),      os.getenv("CS_LLM_MODEL",      _DEFAULT_OLLAMA_MODEL)),
+    "finance":  (os.getenv("FINANCE_LLM_PROVIDER", "ollama"), os.getenv("FINANCE_LLM_MODEL", _DEFAULT_OLLAMA_MODEL)),
+    "default":  (os.getenv("DEFAULT_LLM_PROVIDER", "ollama"), os.getenv("DEFAULT_LLM_MODEL", _DEFAULT_OLLAMA_MODEL)),
 }
 
 

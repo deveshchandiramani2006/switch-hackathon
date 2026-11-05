@@ -33,11 +33,10 @@ def cmd_new_lead(client, text: str, sender: str, tenant_id: str):
         )
         lead_id = cur.fetchone()["id"]
 
-    client.post_message(
-        f"Lead added (#{lead_id})\n"
-        f"*{name}* -- {role} @ {city}\n"
-        f"Industry: {industry} | Deal: {format_value(deal_value)}\n"
-        f"Stage: Prospect | Rep: @{sender}"
+    from app.Services.BlockBuilder import lead_added
+    client.post_blocks(
+        lead_added(name, f"{role} @ {city}", format_value(deal_value)),
+        fallback_text=f"Lead added: {name}"
     )
 
 
@@ -58,11 +57,10 @@ def cmd_new_lead_data(client, data: dict, sender: str, tenant_id: str):
         )
         lead_id = cur.fetchone()["id"]
 
-    client.post_message(
-        f"Lead added (#{lead_id})\n"
-        f"*{data['name']}* — {data['role']} @ {data['city']}\n"
-        f"Industry: {data['industry']} | Deal: {format_value(deal_value)}\n"
-        f"Stage: Prospect | Rep: @{sender}"
+    from app.Services.BlockBuilder import lead_added
+    client.post_blocks(
+        lead_added(data["name"], f"{data['role']} @ {data['city']}", format_value(deal_value)),
+        fallback_text=f"Lead added: {data['name']}"
     )
 
 
@@ -96,14 +94,14 @@ def cmd_pipeline(client, text: str, sender: str, tenant_id: str):
         client.post_message("No leads in pipeline.")
         return
 
-    lines = ["*Pipeline*" + (f" -- {geo_filter}" if geo_filter else "") + "\n"]
+    from app.Services.BlockBuilder import pipeline_row, _section
+    header = "*Pipeline*" + (f" — {geo_filter}" if geo_filter else "")
+    blocks = [_section(header)]
     for r in rows:
         days = (datetime.now() - r["last_touched_at"]).days if r["last_touched_at"] else "?"
-        lines.append(
-            f"- *{r['name']}* | {r['stage']} | {format_value(r['deal_value'])} "
-            f"| {r['city']} | touched {days}d ago | {r['rep_slack_user']}"
-        )
-    client.post_message("\n".join(lines))
+        label = f"{format_value(r['deal_value'])} | {r['city']} | touched {days}d ago"
+        blocks += pipeline_row(r["name"], r["stage"], label)
+    client.post_blocks(blocks, fallback_text="Pipeline")
 
 
 def cmd_follow_up(client, text: str, sender: str, tenant_id: str):

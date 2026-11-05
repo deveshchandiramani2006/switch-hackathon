@@ -295,12 +295,11 @@ def handle_brief(client, text: str, tenant_id: str = "default"):
             )
             q_id = cur.fetchone()["id"]
 
-    preview = body[:300] + "..." if len(body) > 300 else body
-    client.post_message(
-        f"*Draft ready* (#{q_id})\n"
-        f"*{title}*\n_{meta}_\n\n"
-        f"{preview}\n\n"
-        f"Reply `approve #{q_id}` to publish or `reject #{q_id}` to discard."
+    preview = body[:200] + "…" if len(body) > 200 else body
+    from app.Services.BlockBuilder import draft_created
+    client.post_blocks(
+        draft_created(q_id, title, preview),
+        fallback_text=f"Draft ready #{q_id}: {title}"
     )
 
 
@@ -337,13 +336,11 @@ def show_queue(client, tenant_id: str):
             (tenant_id,)
         )
         rows = cur.fetchall()
-    if not rows:
-        client.post_message("Content queue is empty.")
-        return
-    lines = ["*Content queue:*\n"]
-    for r in rows:
-        lines.append(f"- #{r['id']} | {r['keyword']} | {r['status']}")
-    client.post_message("\n".join(lines))
+    from app.Services.BlockBuilder import draft_queue
+    client.post_blocks(
+        draft_queue([dict(r) for r in rows]),
+        fallback_text="Content queue"
+    )
 
 
 def preview_draft(client, ref: str, tenant_id: str):

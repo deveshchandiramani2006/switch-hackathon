@@ -1,7 +1,7 @@
 flask==3.1.0
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
-slack-bolt==1.19.3
+slack-bolt>=1.19.0
 anthropic==0.40.0
 openai-whisper==20231117
 apscheduler==3.10.4

@@ -135,10 +135,10 @@ def _cmd_invoice(client, text: str, sender: str, tenant_id: str):
         )
         inv_id = cur.fetchone()["id"]
 
-    client.post_message(
-        f"Invoice logged (invoice-{inv_id:03d})\n"
-        f"*{vendor}* | {_fmt_v(amount)} | due: {due_date or 'not set'} | category: {category or 'none'}\n"
-        f"Status: pending — reply `@FinanceAgent approve: invoice-{inv_id:03d}` to approve"
+    from app.Services.BlockBuilder import invoice_logged
+    client.post_blocks(
+        invoice_logged(f"{inv_id:03d}", vendor, _fmt_v(amount), str(due_date or "not set"), category),
+        fallback_text=f"Invoice logged: {vendor} {_fmt_v(amount)}"
     )
 
 
@@ -157,18 +157,11 @@ def _cmd_list_invoices(client, tenant_id: str):
         )
         rows = cur.fetchall()
 
-    if not rows:
-        client.post_message("No invoices found.")
-        return
-
-    lines = ["*Invoices:*\n"]
-    for r in rows:
-        icon = "[PENDING]" if r["status"] == "pending" else ("[OK]" if r["status"] == "approved" else "[X]")
-        lines.append(
-            f"{icon} invoice-{r['id']:03d} | *{r['vendor']}* | {_fmt_v(r['amount'])} "
-            f"| due: {r['due_date'] or 'N/A'} | {r['category'] or 'misc'}"
-        )
-    client.post_message("\n".join(lines))
+    from app.Services.BlockBuilder import invoice_list
+    client.post_blocks(
+        invoice_list([dict(r) for r in rows]),
+        fallback_text="Invoices list"
+    )
 
 
 def _cmd_approve_invoice(client, text: str, sender: str, tenant_id: str):
@@ -468,9 +461,10 @@ def cmd_invoice_data(client, data: dict, sender: str, tenant_id: str):
             (tenant_id, data["vendor"], amount, due_date, category, f"@{sender}")
         )
         inv_id = cur.fetchone()["id"]
-    client.post_message(
-        f"Invoice logged (invoice-{inv_id:03d})\n*{data['vendor']}* | {_fmt_v(amount)} | due: {due_date or 'not set'} | category: {category or 'none'}\n"
-        f"Status: pending — reply `@FinanceAgent approve: invoice-{inv_id:03d}` to approve"
+    from app.Services.BlockBuilder import invoice_logged
+    client.post_blocks(
+        invoice_logged(f"{inv_id:03d}", data["vendor"], _fmt_v(amount), str(due_date or "not set"), category),
+        fallback_text=f"Invoice logged: {data['vendor']} {_fmt_v(amount)}"
     )
 
 

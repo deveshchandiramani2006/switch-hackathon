@@ -73,15 +73,14 @@ def show_status(client, tenant_id: str):
             "No services monitored. Add one: `@InfraAgent add: service-name -> https://url`"
         )
         return
-    lines = ["*Service Health*\n"]
+    from app.Services.BlockBuilder import service_status_row, _section
+    blocks = [_section("*Service Health*")]
     for r in rows:
-        icon = "[UP]" if r["status"] == "healthy" else ("[WARN]" if r["status"] == "degraded" else "[DOWN]")
-        checked = r["last_checked_at"].strftime("%H:%M") if r["last_checked_at"] else "never"
-        lines.append(
-            f"{icon} *{r['name']}* -- {r['status']} | "
-            f"HTTP {r['last_status_code'] or '?'} | checked {checked}"
+        blocks += service_status_row(
+            r["name"], r["url"], r["status"] or "unknown",
+            r.get("consecutive_failures") or 0
         )
-    client.post_message("\n".join(lines))
+    client.post_blocks(blocks, fallback_text="Service health status")
 
 
 def ping_service(client, url: str):
