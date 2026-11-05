@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import threading
 from dotenv import load_dotenv
@@ -95,6 +96,34 @@ def _register_global_handlers(app):
         if payload["sender"] == client.agent_name:
             return
         cb(client, payload)
+
+    @app.command("/nexus")
+    def on_nexus_command(ack, command, client):
+        ack()
+        channel_id = command.get("channel_id", "")
+        entry      = _channel_registry.get(channel_id)
+        tenant_id  = entry[0].tenant_id if entry else "default"
+        from app.Services.ModalService import open_modal
+        open_modal(
+            trigger_id=command["trigger_id"],
+            text=command.get("text", "").strip().lower(),
+            channel_id=channel_id,
+            tenant_id=tenant_id,
+            user_id=command.get("user_id", ""),
+            client=client,
+        )
+
+    @app.view(re.compile(r"^modal_"))
+    def on_view_submission(ack, body, client, view):
+        ack()
+        from app.Services.ModalService import handle_submission
+        handle_submission(
+            callback_id=view["callback_id"],
+            state_values=view["state"]["values"],
+            metadata_str=view.get("private_metadata", ""),
+            user_id=body["user"]["id"],
+            app_client=client,
+        )
 
 
 def _build_payload(client, event: dict, is_mention: bool) -> dict:
