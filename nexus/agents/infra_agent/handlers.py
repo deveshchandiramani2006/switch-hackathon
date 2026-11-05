@@ -12,7 +12,9 @@ def handle_message(client, payload: dict):
     room_id    = payload.get("room_id", client.room_id)
     tenant_id  = client.tenant_id
 
-    if not text or sender in ("InfraAgent", "NEXUS"):
+    if sender in ("InfraAgent", "NEXUS"):
+        return
+    if not text and not payload.get("is_mention"):
         return
     if not is_mention:
         return

@@ -1,57 +1,9 @@
 # NEXUS Testing Guide
 
----
-
-## Before You Test Anything
-
-### 1. One-time Slack App Setup (api.slack.com/apps)
-- **OAuth & Permissions → Bot Token Scopes** → add `app_mentions:read`
-- **Event Subscriptions → Subscribe to bot events** → add `app_mention` + `message.channels`
-- Click **Reinstall to Workspace** after adding scopes
-
-### 2. Invite the bot to every channel
-The bot's Slack name is **`@nexus`** — not the agent name.
-Run `/invite @nexus` in each of these channels:
-
-| Channel | Agent |
-|---------|-------|
-| `#nexus-sales` | SalesAgent |
-| `#nexus-support` | SupportAgent |
-| `#nexus-cs` | CSAgent |
-| `#nexus-finance` | FinanceAgent |
-| `#nexus-growth` | GeoSEOAgent |
-| `#nexus-content` | BlogAgent |
-| `#nexus-devops` | InfraAgent |
-
-### 3. Set your domain in .env
-```
-GEO_TARGET_DOMAIN=yourdomain.com
-```
-
-### 4. Run DB migrations
-```bash
-cd nexus
-python3 database/migrations/migrate.py
-```
-
-### 5. Start agents
-```bash
-# Each in a separate terminal
-python3 -m agents.sales_agent.main
-python3 -m agents.support_agent.main
-python3 -m agents.cs_agent.main
-python3 -m agents.finance_agent.main
-python3 -m agents.geo_seo_agent.main
-python3 -m agents.blog_agent.main
-python3 -m agents.infra_agent.main
-```
-
----
-
 ## How to Talk to Agents
 
 - Mention `@nexus` in the channel — the agent responds
-- If you just type `@nexus` with no command, it shows all available commands
+- Type `@nexus help` in any channel to see all available commands for that agent
 - **Buttons on responses** — click them instead of typing follow-up commands
 - All commands are case-insensitive
 

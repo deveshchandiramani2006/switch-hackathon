@@ -16,7 +16,9 @@ def handle_message(client, payload: dict):
     is_mention = payload.get("is_mention", False)
     tenant_id  = client.tenant_id
 
-    if not text or sender in ("SalesAgent", "NEXUS"):
+    if sender in ("SalesAgent", "NEXUS"):
+        return
+    if not text and not payload.get("is_mention"):
         return
 
     # Cross-agent signal from GeoSEOAgent

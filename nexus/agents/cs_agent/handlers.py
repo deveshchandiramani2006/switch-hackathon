@@ -21,7 +21,9 @@ def handle_message(client, payload: dict):
     room_id    = payload.get("room_id", client.room_id)
     tenant_id  = client.tenant_id
 
-    if not text or sender in ("CSAgent", "NEXUS"):
+    if sender in ("CSAgent", "NEXUS"):
+        return
+    if not text and not payload.get("is_mention"):
         return
 
     # Cross-agent signals (not @mentions)
