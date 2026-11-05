@@ -97,7 +97,7 @@ def _register_global_handlers(app):
             return
         cb(client, payload)
 
-    @app.command("/nexus")
+    @app.command(re.compile(r"^/nexus"))
     def on_nexus_command(ack, command, client):
         ack()
         channel_id = command.get("channel_id", "")
@@ -106,6 +106,7 @@ def _register_global_handlers(app):
         from app.Services.ModalService import open_modal
         open_modal(
             trigger_id=command["trigger_id"],
+            command=command["command"],          # e.g. "/nexus-customer"
             text=command.get("text", "").strip().lower(),
             channel_id=channel_id,
             tenant_id=tenant_id,

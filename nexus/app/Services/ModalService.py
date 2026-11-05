@@ -189,56 +189,66 @@ MODALS = {
     },
 }
 
-# Maps slash command text → modal callback_id
-COMMAND_ROUTE = {
-    "add customer":     "modal_add_customer",
-    "customer":         "modal_add_customer",
-    "new lead":         "modal_new_lead",
-    "lead":             "modal_new_lead",
-    "nps":              "modal_log_nps",
-    "health":           "modal_health_check",
-    "expansion":        "modal_expansion",
-    "qbr":              "modal_qbr",
-    "invoice":          "modal_add_invoice",
-    "expense":          "modal_add_expense",
-    "add service":      "modal_add_service",
-    "monitor":          "modal_add_service",
-    "draft":            "modal_draft_post",
-    "draft post":       "modal_draft_post",
-    "commitment":       "modal_set_commitment",
-    "set commitment":   "modal_set_commitment",
-    "bug":              "modal_log_bug",
-    "log bug":          "modal_log_bug",
-    "reject":           "modal_reject_invoice",
-    "reject invoice":   "modal_reject_invoice",
-    "lost":             "modal_lost_lead",
-    "lost lead":        "modal_lost_lead",
+# Maps /nexus-* slash command → modal callback_id
+SLASH_ROUTE = {
+    "/nexus-customer":   "modal_add_customer",
+    "/nexus-lead":       "modal_new_lead",
+    "/nexus-lost":       "modal_lost_lead",
+    "/nexus-commitment": "modal_set_commitment",
+    "/nexus-nps":        "modal_log_nps",
+    "/nexus-health":     "modal_health_check",
+    "/nexus-expansion":  "modal_expansion",
+    "/nexus-qbr":        "modal_qbr",
+    "/nexus-invoice":    "modal_add_invoice",
+    "/nexus-expense":    "modal_add_expense",
+    "/nexus-reject":     "modal_reject_invoice",
+    "/nexus-bug":        "modal_log_bug",
+    "/nexus-service":    "modal_add_service",
+    "/nexus-draft":      "modal_draft_post",
 }
 
 HELP_TEXT = (
-    "*Available /nexus commands:*\n"
-    "1. `add customer`\n"
-    "2. `new lead`\n"
-    "3. `lost`\n"
-    "4. `set commitment`\n"
-    "5. `nps`\n"
-    "6. `health`\n"
-    "7. `expansion`\n"
-    "8. `qbr`\n"
-    "9. `invoice`\n"
-    "10. `expense`\n"
-    "11. `reject invoice`\n"
-    "12. `bug`\n"
-    "13. `add service`\n"
-    "14. `draft`"
+    "*NEXUS slash commands — type any to open a form:*\n"
+    "1. `/nexus-customer` — add customer\n"
+    "2. `/nexus-lead` — new sales lead\n"
+    "3. `/nexus-lost` — close lost deal\n"
+    "4. `/nexus-commitment` — set commitment\n"
+    "5. `/nexus-nps` — log NPS score\n"
+    "6. `/nexus-health` — customer health\n"
+    "7. `/nexus-expansion` — expansion opportunities\n"
+    "8. `/nexus-qbr` — QBR agenda\n"
+    "9. `/nexus-invoice` — new invoice\n"
+    "10. `/nexus-expense` — expense claim\n"
+    "11. `/nexus-reject` — reject invoice\n"
+    "12. `/nexus-bug` — log bug\n"
+    "13. `/nexus-service` — monitor service\n"
+    "14. `/nexus-draft` — draft blog post"
 )
 
 
 # ── Open modal ─────────────────────────────────────────────────────────────────
 
-def open_modal(trigger_id: str, text: str, channel_id: str, tenant_id: str,
-               user_id: str, client):
-    callback_id = COMMAND_ROUTE.get(text.strip().lower())
+_TEXT_ROUTE = {
+    "add customer": "modal_add_customer",    "customer":       "modal_add_customer",
+    "new lead":     "modal_new_lead",         "lead":           "modal_new_lead",
+    "lost":         "modal_lost_lead",         "lost lead":      "modal_lost_lead",
+    "nps":          "modal_log_nps",
+    "health":       "modal_health_check",
+    "expansion":    "modal_expansion",
+    "qbr":          "modal_qbr",
+    "invoice":      "modal_add_invoice",
+    "expense":      "modal_add_expense",
+    "reject":       "modal_reject_invoice",   "reject invoice": "modal_reject_invoice",
+    "bug":          "modal_log_bug",           "log bug":        "modal_log_bug",
+    "add service":  "modal_add_service",       "monitor":        "modal_add_service",
+    "draft":        "modal_draft_post",        "draft post":     "modal_draft_post",
+    "commitment":   "modal_set_commitment",    "set commitment": "modal_set_commitment",
+}
+
+
+def open_modal(trigger_id: str, channel_id: str, tenant_id: str,
+               user_id: str, client, command: str = "", text: str = ""):
+    callback_id = SLASH_ROUTE.get(command) or _TEXT_ROUTE.get(text.strip().lower())
     if not callback_id:
         client.chat_postEphemeral(channel=channel_id, user=user_id, text=HELP_TEXT)
         return
