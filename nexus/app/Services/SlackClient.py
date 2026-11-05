@@ -17,11 +17,108 @@ _AGENT_CHANNEL_ENV = {
     "InfraAgent":   "SLACK_CHANNEL_ID_DEVOPS",
 }
 
+# ── Module-level singletons ───────────────────────────────────────────────────
+# All SlackClient instances in this process share ONE Bolt app and ONE socket
+# connection. Slack distributes events across connections round-robin when
+# multiple SocketModeHandlers share the same App-Level Token, so running 7
+# separate connections means 6/7 events land on the wrong agent.
+
+_lock             = threading.Lock()
+_shared_app       = None   # single slack_bolt.App
+_socket_started   = False  # True once SocketModeHandler thread is running
+_bot_user_id      = None   # resolved once, shared
+_channel_registry = {}     # channel_id → (SlackClient, callback)
+
+
+def _get_or_create_app(bot_token: str):
+    global _shared_app
+    with _lock:
+        if _shared_app is None:
+            from slack_bolt import App
+            _shared_app = App(token=bot_token)
+            _register_global_handlers(_shared_app)
+            logger.info("Shared Bolt app created")
+        return _shared_app
+
+
+def _register_global_handlers(app):
+    """Register event handlers on the shared app exactly once."""
+
+    @app.event("app_mention")
+    def on_mention(event, say):
+        channel = event.get("channel", "")
+        entry   = _channel_registry.get(channel)
+        if not entry:
+            return
+        client, cb = entry
+        if event.get("user") == _bot_user_id:
+            return
+        payload = _build_payload(client, event, is_mention=True)
+        if payload["sender"] == client.agent_name:
+            return
+        cb(client, payload)
+
+    @app.action("nexus_cmd")
+    def on_button_click(ack, body, action):
+        ack()
+        channel = body.get("channel", {}).get("id", "")
+        entry   = _channel_registry.get(channel)
+        if not entry:
+            return
+        client, cb = entry
+        user_id = body.get("user", {}).get("id", "")
+        sender  = client._get_user_name(user_id) if user_id else "unknown"
+        cmd     = action.get("value", "").strip()
+        if cmd:
+            payload = {
+                "text":       cmd,
+                "sender":     sender,
+                "room_id":    channel,
+                "is_mention": True,
+                "addressed":  True,
+            }
+            cb(client, payload)
+
+    @app.event("message")
+    def on_message(event, say):
+        if event.get("subtype") or event.get("bot_id"):
+            return
+        channel = event.get("channel", "")
+        entry   = _channel_registry.get(channel)
+        if not entry:
+            return
+        client, cb = entry
+        # Skip if it's a mention — already handled by on_mention
+        if _bot_user_id and f"<@{_bot_user_id}>" in event.get("text", ""):
+            return
+        payload = _build_payload(client, event, is_mention=False)
+        if payload["sender"] == client.agent_name:
+            return
+        cb(client, payload)
+
+
+def _build_payload(client, event: dict, is_mention: bool) -> dict:
+    user_id = event.get("user", "")
+    sender  = client._get_user_name(user_id) if user_id else "unknown"
+    text    = event.get("text", "")
+    if is_mention and _bot_user_id:
+        text = text.replace(f"<@{_bot_user_id}>", "").strip()
+    return {
+        "text":       text,
+        "sender":     sender,
+        "room_id":    event.get("channel", client.channel_id),
+        "is_mention": is_mention,
+        "addressed":  True,
+    }
+
 
 class SlackClient:
     """
     Drop-in replacement for SwitchClient — same public interface so all
     agent handlers work without modification.
+
+    All instances in the same process share one Bolt app and one Socket Mode
+    connection so Slack always routes events to the right agent.
 
     Requires:
         SLACK_BOT_TOKEN   xoxb-...   Bot User OAuth Token
@@ -35,26 +132,15 @@ class SlackClient:
         self.bot_token   = bot_token
         self.app_token   = app_token
         self.channel_id  = channel_id
-        self.room_id     = channel_id   # same attribute name as SwitchClient
+        self.room_id     = channel_id
         self.tenant_id   = tenant_id
-        self._on_message_cb = None
-        self._bot_user_id   = None
-        self._app           = None
+        self._app        = None
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    def _get_bot_user_id(self) -> str:
-        if self._bot_user_id:
-            return self._bot_user_id
-        try:
-            resp = self._app.client.auth_test()
-            self._bot_user_id = resp["user_id"]
-        except Exception as e:
-            logger.error(f"auth_test failed: {e}")
-            self._bot_user_id = ""
-        return self._bot_user_id
-
     def _get_user_name(self, user_id: str) -> str:
+        if not self._app:
+            return user_id
         try:
             resp = self._app.client.users_info(user=user_id)
             profile = resp["user"]["profile"]
@@ -72,7 +158,6 @@ class SlackClient:
             logger.error(f"post_message failed: {e}")
 
     def post_blocks(self, blocks: list, fallback_text: str = "", room_id: str = None):
-        """Post a Block Kit message. Falls back to plain text if blocks fail."""
         channel = room_id or self.channel_id
         try:
             self._app.client.chat_postMessage(
@@ -86,11 +171,9 @@ class SlackClient:
                 self.post_message(fallback_text, room_id=room_id)
 
     def send_targeted_message(self, target_agent_id: str, message: str):
-        # In Slack context target_agent_id is treated as a channel ID
         self.post_message(message, room_id=target_agent_id)
 
     def safe_signal(self, target_name: str, message: str):
-        """Send a cross-agent signal to the target agent's Slack channel."""
         env_var = _AGENT_CHANNEL_ENV.get(target_name)
         channel = os.getenv(env_var, "") if env_var else ""
         if channel:
@@ -100,7 +183,6 @@ class SlackClient:
             logger.info(f"{target_name} Slack channel not configured — skipping signal")
 
     def list_agents(self) -> list:
-        # Not applicable for Slack; return empty so safe_signal falls through gracefully
         return []
 
     def record_heartbeat(self):
@@ -132,86 +214,42 @@ class SlackClient:
             return []
 
     def set_addressing(self, mode: str):
-        pass  # no-op for Slack
+        pass
 
     # ── Connection ────────────────────────────────────────────────────────────
 
     def connect(self, on_message_callback, addressing_mode: str = "anyone"):
-        from slack_bolt import App
-        from slack_bolt.adapter.socket_mode import SocketModeHandler
+        global _socket_started, _bot_user_id
 
-        self._on_message_cb = on_message_callback
-        self._app = App(token=self.bot_token)
+        self._app = _get_or_create_app(self.bot_token)
 
-        # Resolve bot user ID up front so we can filter self-messages
-        bot_user_id = self._get_bot_user_id()
-        agent_name  = self.agent_name
-        channel_id  = self.channel_id
+        # Resolve bot user ID once for the whole process
+        with _lock:
+            if _bot_user_id is None:
+                try:
+                    resp = self._app.client.auth_test()
+                    _bot_user_id = resp["user_id"]
+                    logger.info(f"Bot user ID: {_bot_user_id}")
+                except Exception as e:
+                    logger.error(f"auth_test failed: {e}")
+                    _bot_user_id = ""
 
-        def _build_payload(event: dict, is_mention: bool) -> dict:
-            user_id = event.get("user", "")
-            sender  = self._get_user_name(user_id) if user_id else "unknown"
-            text    = event.get("text", "")
-            # Strip <@BOTID> prefix that Slack prepends on mentions
-            if is_mention and bot_user_id:
-                text = text.replace(f"<@{bot_user_id}>", "").strip()
-            return {
-                "text":       text,
-                "sender":     sender,
-                "room_id":    event.get("channel", channel_id),
-                "is_mention": is_mention,
-                "addressed":  True,
-            }
+        # Register this agent's channel
+        _channel_registry[self.channel_id] = (self, on_message_callback)
+        logger.info(f"{self.agent_name} registered for channel {self.channel_id}")
 
-        @self._app.event("app_mention")
-        def on_mention(event, say):
-            if event.get("channel") != channel_id:
-                return
-            payload = _build_payload(event, is_mention=True)
-            if payload["sender"] == agent_name:
-                return
-            if self._on_message_cb:
-                self._on_message_cb(self, payload)
+        # Start the socket handler only once (first agent to connect starts it)
+        with _lock:
+            if not _socket_started:
+                _socket_started = True
+                app_token = self.app_token
 
-        @self._app.action("nexus_cmd")
-        def on_button_click(ack, body, action):
-            ack()
-            if body.get("channel", {}).get("id") != channel_id:
-                return
-            user_id = body.get("user", {}).get("id", "")
-            sender  = self._get_user_name(user_id) if user_id else "unknown"
-            cmd     = action.get("value", "").strip()
-            if cmd and self._on_message_cb:
-                payload = {
-                    "text":       cmd,
-                    "sender":     sender,
-                    "room_id":    channel_id,
-                    "is_mention": True,
-                    "addressed":  True,
-                }
-                self._on_message_cb(self, payload)
+                def _run():
+                    from slack_bolt.adapter.socket_mode import SocketModeHandler
+                    logger.info("Starting shared Socket Mode connection...")
+                    handler = SocketModeHandler(self._app, app_token)
+                    handler.start()
 
-        @self._app.event("message")
-        def on_message(event, say):
-            # Skip edits, deletes, bot posts, and messages in other channels
-            if event.get("subtype") or event.get("bot_id"):
-                return
-            if event.get("channel") != channel_id:
-                return
-            # Skip if it's a mention — already handled by on_mention
-            if bot_user_id and f"<@{bot_user_id}>" in event.get("text", ""):
-                return
-            payload = _build_payload(event, is_mention=False)
-            if payload["sender"] == agent_name:
-                return
-            if self._on_message_cb:
-                self._on_message_cb(self, payload)
-
-        def _run():
-            handler = SocketModeHandler(self._app, self.app_token)
-            logger.info(f"{agent_name} connecting to Slack via Socket Mode...")
-            handler.start()
-
-        t = threading.Thread(target=_run, daemon=True)
-        t.start()
-        logger.info(f"{agent_name} Slack thread started")
+                t = threading.Thread(target=_run, daemon=True)
+                t.start()
+                logger.info("Socket Mode thread launched")
