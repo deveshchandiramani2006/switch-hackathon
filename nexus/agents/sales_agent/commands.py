@@ -208,6 +208,19 @@ def cmd_lost(client, text: str, sender: str, tenant_id: str):
     client.post_message(f"❌ Deal lost: *{name}* · {reason}")
 
 
+def cmd_lost_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ModalService after modal submission."""
+    name   = data["name"]
+    reason = data.get("reason", "unspecified")
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE leads SET stage='Closed-Lost', notes=%s, updated_at=NOW() "
+            "WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s)",
+            (f"Lost: {reason}", tenant_id, f"%{name}%")
+        )
+    client.post_message(f"❌ Deal lost: *{name}* · {reason}")
+
+
 def cmd_set_commitment(client, text: str, sender: str, tenant_id: str):
     raw = text.split(":", 1)[1].strip() if ":" in text else text
     with db_cursor() as cur:

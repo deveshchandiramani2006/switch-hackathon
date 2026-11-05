@@ -156,9 +156,35 @@ MODALS = {
         "title": "Set Commitment",
         "agent": "SalesAgent",
         "blocks": [
-            _text("lead",       "Lead name",          "Priya Sharma"),
-            _text("commitment", "Commitment",          "Send proposal by Friday", multiline=True),
-            _date("due_date",   "Due date", optional=True),
+            _text("lead",       "Lead name",   "Priya Sharma"),
+            _text("commitment", "Commitment",  "Send proposal by Friday", multiline=True),
+            _date("due_date",   "Due date",    optional=True),
+        ],
+    },
+    "modal_log_bug": {
+        "title": "Log Bug",
+        "agent": "SupportAgent",
+        "blocks": [
+            _text("description", "Bug description", "Payment fails on checkout for Indian cards",
+                  multiline=True),
+            _select("severity", "Severity", ["P0 — production down", "P1 — major feature broken",
+                                             "P2 — degraded, workaround exists", "P3 — minor / cosmetic"]),
+        ],
+    },
+    "modal_reject_invoice": {
+        "title": "Reject Invoice",
+        "agent": "FinanceAgent",
+        "blocks": [
+            _text("invoice_id", "Invoice ID", "42"),
+            _text("reason",     "Reason for rejection", "Duplicate invoice"),
+        ],
+    },
+    "modal_lost_lead": {
+        "title": "Close Lost Deal",
+        "agent": "SalesAgent",
+        "blocks": [
+            _text("name",   "Lead name",      "Priya Sharma"),
+            _text("reason", "Lost reason",    "Budget", hint="e.g. budget, timing, competitor, no response"),
         ],
     },
 }
@@ -181,21 +207,30 @@ COMMAND_ROUTE = {
     "draft post":       "modal_draft_post",
     "commitment":       "modal_set_commitment",
     "set commitment":   "modal_set_commitment",
+    "bug":              "modal_log_bug",
+    "log bug":          "modal_log_bug",
+    "reject":           "modal_reject_invoice",
+    "reject invoice":   "modal_reject_invoice",
+    "lost":             "modal_lost_lead",
+    "lost lead":        "modal_lost_lead",
 }
 
 HELP_TEXT = (
     "*Available /nexus commands:*\n"
     "1. `add customer`\n"
     "2. `new lead`\n"
-    "3. `nps`\n"
-    "4. `health`\n"
-    "5. `expansion`\n"
-    "6. `qbr`\n"
-    "7. `invoice`\n"
-    "8. `expense`\n"
-    "9. `add service`\n"
-    "10. `draft`\n"
-    "11. `set commitment`"
+    "3. `lost`\n"
+    "4. `set commitment`\n"
+    "5. `nps`\n"
+    "6. `health`\n"
+    "7. `expansion`\n"
+    "8. `qbr`\n"
+    "9. `invoice`\n"
+    "10. `expense`\n"
+    "11. `reject invoice`\n"
+    "12. `bug`\n"
+    "13. `add service`\n"
+    "14. `draft`"
 )
 
 
@@ -366,6 +401,26 @@ def handle_submission(callback_id: str, state_values: dict,
             from agents.sales_agent.commands import cmd_set_commitment_data
             cmd_set_commitment_data(client,
                 {"lead": v("lead"), "commitment": v("commitment"), "due_date": v("due_date")},
+                user_id, tenant_id)
+
+        elif callback_id == "modal_log_bug":
+            from agents.support_agent.handlers import cmd_log_bug_data
+            sev_raw = v("severity")
+            sev = sev_raw.split(" ")[0] if sev_raw else "P2"  # "P0 — production down" → "P0"
+            cmd_log_bug_data(client,
+                {"description": v("description"), "severity": sev},
+                user_id, tenant_id)
+
+        elif callback_id == "modal_reject_invoice":
+            from agents.finance_agent.handlers import cmd_reject_invoice_data
+            cmd_reject_invoice_data(client,
+                {"invoice_id": v("invoice_id"), "reason": v("reason")},
+                user_id, tenant_id)
+
+        elif callback_id == "modal_lost_lead":
+            from agents.sales_agent.commands import cmd_lost_data
+            cmd_lost_data(client,
+                {"name": v("name"), "reason": v("reason")},
                 user_id, tenant_id)
 
         else:

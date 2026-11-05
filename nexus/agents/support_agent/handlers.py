@@ -160,6 +160,27 @@ def triage_bug(client, description: str, sender: str, tenant_id: str):
         )
 
 
+def cmd_log_bug_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ModalService after modal submission."""
+    description = data["description"]
+    sev = data.get("severity", "P2").upper()
+    with db_cursor() as cur:
+        cur.execute(
+            "INSERT INTO bugs (tenant_id, description, severity, reported_by, source) "
+            "VALUES (%s, %s, %s, %s, 'modal') RETURNING id",
+            (tenant_id, description, sev, f"@{sender}")
+        )
+        bug_id = cur.fetchone()["id"]
+    from app.Services.BlockBuilder import bug_logged
+    client.post_blocks(
+        bug_logged(bug_id, description, sev),
+        fallback_text=f"Bug #{bug_id} logged ({sev})"
+    )
+    if sev in ("P0", "P1"):
+        issue_text = description[:60].replace(" ", "_")
+        client.safe_signal("CSAgent", f"P1_BREACH: customer=Unknown issue={issue_text}")
+
+
 def passive_triage(client, text: str, sender: str, tenant_id: str):
     if len(text) < 20:
         return
