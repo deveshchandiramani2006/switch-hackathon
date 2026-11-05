@@ -95,7 +95,7 @@ def cmd_pipeline(client, text: str, sender: str, tenant_id: str):
         return
 
     from app.Services.BlockBuilder import pipeline_row, _section
-    header = "*Pipeline*" + (f" — {geo_filter}" if geo_filter else "")
+    header = "*Pipeline*" + (f": {geo_filter}" if geo_filter else "")
     blocks = [_section(header)]
     for r in rows:
         days = (datetime.now() - r["last_touched_at"]).days if r["last_touched_at"] else "?"
@@ -179,7 +179,7 @@ def cmd_won(client, text: str, sender: str, tenant_id: str):
         )
         row = cur.fetchone()
     if row:
-        client.post_message(f"🏆 Deal won: *{row['name']}* — {format_value(row['deal_value'])}")
+        client.post_message(f"🏆 Deal won: *{row['name']}* · {format_value(row['deal_value'])}")
         # Cross-agent signals: notify CSAgent and FinanceAgent
         won_name   = row["name"].replace(" ", "_")
         won_amount = row["deal_value"]
@@ -205,7 +205,7 @@ def cmd_lost(client, text: str, sender: str, tenant_id: str):
             "WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s)",
             (f"Lost: {reason}", tenant_id, f"%{name}%")
         )
-    client.post_message(f"❌ Deal lost: *{name}* — {reason}")
+    client.post_message(f"❌ Deal lost: *{name}* · {reason}")
 
 
 def cmd_set_commitment(client, text: str, sender: str, tenant_id: str):
@@ -258,7 +258,7 @@ def cmd_stale_leads(client, sender: str, tenant_id: str):
     lines = [f"*Stale leads ({len(rows)} · untouched 7+ days)*\n"]
     for r in rows:
         days = (datetime.now() - r["last_touched_at"]).days
-        lines.append(f"🕰️ *{r['name']}* — {r['stage']} · {format_value(r['deal_value'])} · {days}d ago")
+        lines.append(f"🕰️ *{r['name']}* · {r['stage']} · {format_value(r['deal_value'])} · {days}d ago")
     client.post_message("\n".join(lines))
 
 
@@ -286,7 +286,7 @@ def cmd_lead_card(client, text: str, sender: str, tenant_id: str):
         "Negotiation": "🔸", "Closed-Won": "🏆", "Closed-Lost": "❌"
     }.get(lead["stage"], "⚫")
     lines = [
-        f"{stage_emoji} *{lead['name']}* — {lead['role']} · {lead['city']}",
+        f"{stage_emoji} *{lead['name']}* · {lead['role']} · {lead['city']}",
         f"_{lead['industry']}_ · {format_value(lead['deal_value'])} · stage: {lead['stage']}",
     ]
     if commits:

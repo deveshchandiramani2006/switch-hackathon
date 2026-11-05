@@ -32,13 +32,13 @@ def calculate_health(customer_id: int, tenant_id: str = "default") -> dict:
     if nps is not None:
         if nps >= 9:
             nps_score = 30
-            signals.append(f"NPS {nps} — promoter")
+            signals.append(f"NPS {nps} (promoter)")
         elif nps >= 7:
             nps_score = 20
-            signals.append(f"NPS {nps} — passive")
+            signals.append(f"NPS {nps} (passive)")
         else:
             nps_score = 5
-            signals.append(f"NPS {nps} — detractor")
+            signals.append(f"NPS {nps} (detractor)")
     else:
         nps_score = 15  # neutral if no data
         signals.append("No NPS data")
@@ -79,13 +79,13 @@ def calculate_health(customer_id: int, tenant_id: str = "default") -> dict:
         days_to_renewal = (renewal_date - datetime.utcnow().date()).days
         if days_to_renewal > 90:
             renewal_score = 20
-            signals.append(f"Renewal in {days_to_renewal}d — plenty of time")
+            signals.append(f"Renewal in {days_to_renewal}d (ok)")
         elif days_to_renewal > 30:
             renewal_score = 15
-            signals.append(f"Renewal in {days_to_renewal}d — approaching")
+            signals.append(f"Renewal in {days_to_renewal}d (approaching)")
         elif days_to_renewal > 0:
             renewal_score = 8
-            signals.append(f"Renewal in {days_to_renewal}d — URGENT")
+            signals.append(f"Renewal in {days_to_renewal}d (URGENT)")
         else:
             renewal_score = 2
             signals.append(f"Renewal OVERDUE by {abs(days_to_renewal)}d")

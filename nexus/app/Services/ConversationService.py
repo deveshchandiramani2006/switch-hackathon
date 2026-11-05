@@ -77,7 +77,28 @@ SCHEMAS: dict = {
         "fields": [
             {"key": "customer", "prompt": "Customer name?",                      "type": "text",    "required": True},
             {"key": "score",    "prompt": "NPS score? (0 – 10)",                 "type": "integer", "required": True,  "min": 0, "max": 10},
-            {"key": "note",     "prompt": "Feedback note? — or type `skip`",     "type": "text",    "required": False, "skip_phrase": "skip"},
+            {"key": "note",     "prompt": "Feedback note? (or type `skip`)",     "type": "text",    "required": False, "skip_phrase": "skip"},
+        ],
+    },
+    "health_check": {
+        "title": "Customer Health",
+        "agent": "CSAgent",
+        "fields": [
+            {"key": "name", "prompt": "Which customer?", "type": "text", "required": True},
+        ],
+    },
+    "expansion_check": {
+        "title": "Expansion Opportunities",
+        "agent": "CSAgent",
+        "fields": [
+            {"key": "name", "prompt": "Which customer?", "type": "text", "required": True},
+        ],
+    },
+    "qbr_agenda": {
+        "title": "QBR Agenda",
+        "agent": "CSAgent",
+        "fields": [
+            {"key": "name", "prompt": "Which customer?", "type": "text", "required": True},
         ],
     },
     # ── FinanceAgent ───────────────────────────────────────────────────────────
@@ -302,6 +323,18 @@ def _execute(tenant_id: str, command: str, data: dict, sender: str, client):
         elif command == "log_nps":
             from agents.cs_agent.handlers import cmd_log_nps_data
             cmd_log_nps_data(client, data, sender, tenant_id)
+
+        elif command == "health_check":
+            from agents.cs_agent.handlers import cmd_health_check_data
+            cmd_health_check_data(client, data, sender, tenant_id)
+
+        elif command == "expansion_check":
+            from agents.cs_agent.handlers import cmd_expansion_data
+            cmd_expansion_data(client, data, sender, tenant_id)
+
+        elif command == "qbr_agenda":
+            from agents.cs_agent.handlers import cmd_qbr_data
+            cmd_qbr_data(client, data, sender, tenant_id)
 
         elif command == "add_invoice":
             from agents.finance_agent.handlers import cmd_invoice_data

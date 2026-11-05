@@ -56,11 +56,13 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
     _cmd_key = t.split(":")[0].strip()[:50]
     UsageAnalyticsService.log(tenant_id, "CSAgent", _cmd_key, sender)
 
-    if t == "add customer":
-        from app.Services import ConversationService
+    from app.Services import ConversationService
+    if t in ("add customer", "add customer:"):
         ConversationService.start(tenant_id, room_id, sender, "CSAgent", "add_customer", client)
-    elif t.startswith("add customer:"):
+    elif t.startswith("add customer:") and len(t) > len("add customer:"):
         _cmd_add_customer(client, text, sender, tenant_id)
+    elif t == "health":
+        ConversationService.start(tenant_id, room_id, sender, "CSAgent", "health_check", client)
     elif t.startswith("health:"):
         _cmd_health(client, text.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("at-risk") or t.startswith("at risk"):
@@ -74,12 +76,15 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
                 pass
         _cmd_renewals(client, days, tenant_id)
     elif t == "nps":
-        from app.Services import ConversationService
         ConversationService.start(tenant_id, room_id, sender, "CSAgent", "log_nps", client)
     elif t.startswith("nps:"):
         _cmd_log_nps(client, text, sender, tenant_id)
+    elif t == "expansion":
+        ConversationService.start(tenant_id, room_id, sender, "CSAgent", "expansion_check", client)
     elif t.startswith("expansion:"):
         _cmd_expansion(client, text.split(":", 1)[1].strip(), tenant_id)
+    elif t == "qbr":
+        ConversationService.start(tenant_id, room_id, sender, "CSAgent", "qbr_agenda", client)
     elif t.startswith("qbr:"):
         _cmd_qbr(client, text.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("weekly report"):
@@ -94,13 +99,13 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
         from app.Services.BlockBuilder import _section
         client.post_blocks([
             _section("*CSAgent: Customer Success*\n"
-                     "1. `add customer: Name, Rs500K, renewal: 2027-03-31`\n"
-                     "2. `health: Name`\n"
+                     "1. `add customer` — guided form\n"
+                     "2. `health` — guided, or `health: Name`\n"
                      "3. `at-risk`\n"
                      "4. `renewals` or `renewals: 60`\n"
-                     "5. `nps: Name, score: 7, note: feedback`\n"
-                     "6. `expansion: Name`\n"
-                     "7. `qbr: Name`\n"
+                     "5. `nps` — guided form\n"
+                     "6. `expansion` — guided, or `expansion: Name`\n"
+                     "7. `qbr` — guided, or `qbr: Name`\n"
                      "8. `weekly report`")
         ], fallback_text="CSAgent commands")
 
@@ -136,7 +141,7 @@ def _cmd_add_customer(client, text: str, sender: str, tenant_id: str):
         cid = cur.fetchone()["id"]
 
     client.post_message(
-        f"✅ *{name}* added — ARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
+        f"✅ *{name}* added\nARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
     )
 
 
@@ -160,7 +165,7 @@ def _cmd_health(client, name: str, tenant_id: str):
     from app.Services.BlockBuilder import _section, _context
     signals = " · ".join(health["signals"]) if health["signals"] else "No signals"
     client.post_blocks([
-        _section(f"{icon} *{cust['name']}* — Health {health['score']}/100"),
+        _section(f"{icon} *{cust['name']}*, Health {health['score']}/100"),
         _context(f"ARR: {_fmt_v(cust['arr'])}", f"NPS: {cust['nps'] or 'N/A'}", f"Renewal: {renewal_str}"),
         _section(f"_{signals}_"),
     ], fallback_text=f"{cust['name']} health: {health['score']}/100")
@@ -180,14 +185,14 @@ def _cmd_at_risk(client, tenant_id: str):
         rows = cur.fetchall()
 
     if not rows:
-        client.post_message("🟢 All customers healthy — no at-risk accounts.")
+        client.post_message("🟢 All customers healthy, no at-risk accounts.")
         return
 
     lines = [f"*At-risk ({len(rows)})*\n"]
     for r in rows:
         emoji = "🔴" if r["health_score"] < 50 else "🟡"
         lines.append(
-            f"{emoji} *{r['name']}* — score {r['health_score']} · {_fmt_v(r['arr'])}"
+            f"{emoji} *{r['name']}* · score {r['health_score']} · {_fmt_v(r['arr'])}"
         )
     client.post_message("\n".join(lines))
 
@@ -215,7 +220,7 @@ def _cmd_renewals(client, days: int, tenant_id: str):
         days_left = (r["renewal_date"] - date.today()).days
         emoji = "🟢" if r["health_score"] >= 70 else ("🟡" if r["health_score"] >= 50 else "🔴")
         lines.append(
-            f"{emoji} *{r['name']}* — {_fmt_v(r['arr'])} · {days_left}d left"
+            f"{emoji} *{r['name']}* · {_fmt_v(r['arr'])} · {days_left}d left"
         )
     client.post_message("\n".join(lines))
 
@@ -288,9 +293,9 @@ def _cmd_expansion(client, name: str, tenant_id: str):
 
     signals = []
     if cust["health_score"] >= 70:
-        signals.append(f"Health score {cust['health_score']} — satisfied customer")
+        signals.append(f"Health score {cust['health_score']} (satisfied customer)")
     if cust["nps"] and cust["nps"] >= 9:
-        signals.append(f"NPS {cust['nps']} — promoter, likely to expand")
+        signals.append(f"NPS {cust['nps']} (promoter, likely to expand)")
     if len(events) >= 5:
         signals.append(f"High engagement: {len(events)} recent events")
 
@@ -305,10 +310,11 @@ def _cmd_expansion(client, name: str, tenant_id: str):
     from app.Services.FeatureGateService import FeatureGateService
     if not FeatureGateService.gate_llm(tenant_id, client):
         return
-    suggestions = llm.complete(prompt)
+    from app.Services.LlmService import md_to_slack
+    suggestions = md_to_slack(llm.complete(prompt))
     client.post_message(
         f"*Expansion signals for {cust['name']}:*\n"
-        + ("\n".join([f"- {s}" for s in signals]) or "No strong signals yet")
+        + ("\n".join([f"• {s}" for s in signals]) or "No strong signals yet")
         + f"\n\n*AI recommendations:*\n{suggestions}"
     )
 
@@ -339,7 +345,8 @@ def _cmd_qbr(client, name: str, tenant_id: str):
     from app.Services.FeatureGateService import FeatureGateService
     if not FeatureGateService.gate_llm(tenant_id, client):
         return
-    agenda = llm.complete(prompt)
+    from app.Services.LlmService import md_to_slack
+    agenda = md_to_slack(llm.complete(prompt))
     client.post_message(f"*QBR Agenda for {cust['name']}:*\n\n{agenda}")
 
 
@@ -371,7 +378,7 @@ def _cmd_weekly_report(client, tenant_id: str):
     if top_red:
         lines.append("\n*Top at-risk:*")
         for r in top_red:
-            lines.append(f"🔴 {r['name']} — {_fmt_v(r['arr'])}")
+            lines.append(f"🔴 {r['name']} · {_fmt_v(r['arr'])}")
     client.post_message("\n".join(lines))
 
 
@@ -452,7 +459,7 @@ def _handle_deal_won(client, text: str):
 
     if row:
         client.post_message(
-            f"🏆 *{name}* onboarded — ARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
+            f"🏆 *{name}* onboarded\nARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
         )
         logger.info(f"CSAgent created customer from DEAL_WON: {name}")
 
@@ -496,7 +503,7 @@ def _handle_p1_breach(client, text: str):
 
         csm = cust["assigned_csm"] or "@cs_team"
         client.post_message(
-            f"🚨 *P1 Breach* — {customer}\n_{issue}_\nHealth score reduced. {csm} follow up needed."
+            f"🚨 *P1 Breach:* {customer}\n_{issue}_\nHealth score reduced. {csm} follow up needed."
         )
 
 
@@ -517,8 +524,20 @@ def cmd_add_customer_data(client, data: dict, sender: str, tenant_id: str):
         )
         cid = cur.fetchone()["id"]
     client.post_message(
-        f"✅ *{data['name']}* added — ARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
+        f"✅ *{data['name']}* added\nARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
     )
+
+
+def cmd_health_check_data(client, data: dict, sender: str, tenant_id: str):
+    _cmd_health(client, data["name"], tenant_id)
+
+
+def cmd_expansion_data(client, data: dict, sender: str, tenant_id: str):
+    _cmd_expansion(client, data["name"], tenant_id)
+
+
+def cmd_qbr_data(client, data: dict, sender: str, tenant_id: str):
+    _cmd_qbr(client, data["name"], tenant_id)
 
 
 def cmd_log_nps_data(client, data: dict, sender: str, tenant_id: str):
