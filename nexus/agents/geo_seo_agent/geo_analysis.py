@@ -63,15 +63,20 @@ Respond ONLY with valid JSON in this exact format:
             max_tokens=400,
         )
         raw = resp.choices[0].message.content.strip()
-        # Strip markdown code fences if model adds them
-        if raw.startswith("```"):
+        # Strip markdown code fences
+        if "```" in raw:
             raw = raw.split("```")[1]
-            if raw.startswith("json"):
+            if raw.lower().startswith("json"):
                 raw = raw[4:]
+        # Extract JSON object even if model adds surrounding text
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        if start != -1 and end > start:
+            raw = raw[start:end]
         return json.loads(raw)
     except Exception as e:
         logger.error(f"GEO score error for '{keyword}': {e}")
-        return {"score": 0, "reason": str(e), "gaps": []}
+        return {"score": 0, "reason": "Could not parse LLM response", "gaps": []}
 
 
 def generate_geo_recommendations(keyword: str, score_result: dict) -> str:

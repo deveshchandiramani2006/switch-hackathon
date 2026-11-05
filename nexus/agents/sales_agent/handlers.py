@@ -27,7 +27,7 @@ def handle_message(client, payload: dict):
         return
 
     if is_mention:
-        clean = text.split(">", 1)[-1].strip() if ">" in text else text
+        clean = text.split(">", 1)[-1].strip() if text.startswith("<@") else text
         for prefix in ["@SalesAgent ", "@salesagent "]:
             if clean.lower().startswith(prefix.lower()):
                 clean = clean[len(prefix):]
