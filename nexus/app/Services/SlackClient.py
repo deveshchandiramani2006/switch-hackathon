@@ -74,7 +74,6 @@ def _register_slash_commands(app):
     _CMD_MAP = {
         # ── Sales ─────────────────────────────────────────────────────────────
         "/pipeline":     lambda t, ch: "pipeline" + (f": {t}" if t else ""),
-        "/new-lead":     lambda t, ch: f"new lead: {t}" if t else "new lead",
         "/follow-up":    lambda t, ch: f"follow up: {t}",
         "/won":          lambda t, ch: f"won: {t}",
         "/lost":         lambda t, ch: f"lost: {t}",
@@ -194,7 +193,7 @@ def _register_global_handlers(app):
             return
         cb(client, payload)
 
-    @app.command(re.compile(r"^/nexus"))
+    @app.command(re.compile(r"^/nexus|^/new-lead"))
     def on_nexus_command(ack, command, client):
         ack()
         channel_id = command.get("channel_id", "")

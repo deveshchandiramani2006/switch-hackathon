@@ -228,6 +228,7 @@ MODALS = {
 SLASH_ROUTE = {
     "/nexus-customer":   "modal_add_customer",
     "/nexus-lead":       "modal_new_lead",
+    "/new-lead":         "modal_new_lead",
     "/nexus-lost":       "modal_lost_lead",
     "/nexus-commitment": "modal_set_commitment",
     "/nexus-nps":        "modal_log_nps",
