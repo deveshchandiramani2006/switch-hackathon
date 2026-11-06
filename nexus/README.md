@@ -61,42 +61,33 @@ Each agent uses a **HybridClient** — Slack for user-facing output (Block Kit, 
 
 ## Architecture
 
+Each agent handles Slack (commands, Block Kit, modals) and connects to Switch over a persistent WebSocket for agent-to-agent signals. When something happens in one channel, the responsible agent sends a targeted signal directly to the right peer — no broadcast, no polling, no hardcoded IDs.
+
 ```mermaid
-flowchart TD
-    subgraph Slack["🔵 Slack Workspace"]
-        s1["#nexus-sales"]
-        s2["#nexus-finance"]
-        s3["#nexus-cs"]
-        s4["#nexus-support"]
-        s5["#nexus-growth"]
-        s6["#nexus-content"]
-        s7["#nexus-devops"]
+flowchart LR
+    classDef sales   fill:#1d4ed8,stroke:#93c5fd,color:#fff,stroke-width:2px
+    classDef finance fill:#5b21b6,stroke:#c4b5fd,color:#fff,stroke-width:2px
+    classDef cs      fill:#0e7490,stroke:#67e8f9,color:#fff,stroke-width:2px
+    classDef support fill:#991b1b,stroke:#fca5a5,color:#fff,stroke-width:2px
+    classDef geo     fill:#166534,stroke:#86efac,color:#fff,stroke-width:2px
+    classDef blog    fill:#92400e,stroke:#fde68a,color:#fff,stroke-width:2px
+    classDef infra   fill:#374151,stroke:#d1d5db,color:#fff,stroke-width:2px
+
+    subgraph sw["⚡ Switch — agent message bus"]
+        SA("💼 SalesAgent"):::sales
+        FA("💰 FinanceAgent"):::finance
+        CA("🤝 CSAgent"):::cs
+        SUA("🐛 SupportAgent"):::support
+        GEO("📈 GeoSEOAgent"):::geo
+        BA("✍️ BlogAgent"):::blog
+        IA("🖥️ InfraAgent"):::infra
     end
 
-    subgraph Switch["🟣 Switch  —  agent message bus"]
-        SA["SalesAgent"]
-        FA["FinanceAgent"]
-        CA["CSAgent"]
-        SUA["SupportAgent"]
-        GEO["GeoSEOAgent"]
-        BA["BlogAgent"]
-        IA["InfraAgent"]
-    end
-
-    s1 <--> SA
-    s2 <--> FA
-    s3 <--> CA
-    s4 <--> SUA
-    s5 <--> GEO
-    s6 <--> BA
-    s7 <--> IA
-
-    SA -- "DEAL_WON" --> FA
-    SA -- "DEAL_WON" --> CA
-    SUA -- "P1_BREACH" --> CA
-    IA -- "SERVICE_DOWN" --> SUA
-    GEO -- "CONTENT_BRIEF" --> BA
-    FA -- "INVOICE_OVERDUE" --> SA
+    SA  -->|DEAL_WON| FA & CA
+    FA  -->|INVOICE_OVERDUE| SA
+    SUA -->|P1_BREACH| CA
+    IA  -->|SERVICE_DOWN| SUA
+    GEO -->|CONTENT_BRIEF| BA
 ```
 
 ---
