@@ -1,15 +1,15 @@
 """
-BillingService — Stripe-based subscription management.
+BillingService - Stripe-based subscription management.
 
 Env vars:
-  STRIPE_SECRET_KEY    — Stripe API key (sk_live_... or sk_test_...)
-  STRIPE_WEBHOOK_SECRET — For verifying Stripe webhook signatures
-  BILLING_MOCK_MODE    — Set to "true" to use mock checkout (default: false)
+  STRIPE_SECRET_KEY    - Stripe API key (sk_live_... or sk_test_...)
+  STRIPE_WEBHOOK_SECRET - For verifying Stripe webhook signatures
+  BILLING_MOCK_MODE    - Set to "true" to use mock checkout (default: false)
 
 Price IDs (set these to your actual Stripe price IDs):
-  STRIPE_PRICE_STARTER    — Monthly starter plan price ID
-  STRIPE_PRICE_PRO        — Monthly pro plan price ID
-  STRIPE_PRICE_ENTERPRISE — Monthly enterprise plan price ID
+  STRIPE_PRICE_STARTER    - Monthly starter plan price ID
+  STRIPE_PRICE_PRO        - Monthly pro plan price ID
+  STRIPE_PRICE_ENTERPRISE - Monthly enterprise plan price ID
 """
 import os
 import logging

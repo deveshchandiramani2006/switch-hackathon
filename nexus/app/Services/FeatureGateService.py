@@ -1,10 +1,10 @@
 """
-FeatureGateService — subscription tier enforcement and LLM usage tracking.
+FeatureGateService - subscription tier enforcement and LLM usage tracking.
 
 Tiers:
-  free       — 3 agents max, 100 LLM calls/day
-  pro        — all agents, 1 000 LLM calls/day
-  enterprise — all agents, unlimited LLM calls, custom escalation
+  free       - 3 agents max, 100 LLM calls/day
+  pro        - all agents, 1 000 LLM calls/day
+  enterprise - all agents, unlimited LLM calls, custom escalation
 """
 import logging
 from datetime import date
@@ -54,7 +54,7 @@ class FeatureGateService:
             return (row["llm_calls_today"] or 0) < limit
         except Exception as e:
             logger.warning(f"FeatureGateService.can_use_llm failed: {e}")
-            return True  # Fail open — don't break on DB issues
+            return True  # Fail open - don't break on DB issues
 
     @classmethod
     def track_llm_call(cls, tenant_id: str) -> None:

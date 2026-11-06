@@ -1,5 +1,5 @@
 """
-UsageAnalyticsService — logs every agent command execution.
+UsageAnalyticsService - logs every agent command execution.
 
 Schema: usage_events(tenant_id, agent, command, username, success, error_msg, latency_ms)
 Retention: 90-day rolling window (clean up via artisan cleanup-usage command).

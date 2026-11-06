@@ -1,5 +1,5 @@
 """
-ConversationService — stateful guided-input wizard (modal) for multi-field commands.
+ConversationService - stateful guided-input wizard (modal) for multi-field commands.
 
 When a user types a command without required args, the agent starts a conversation
 session that prompts for each field one at a time, validates each answer, then
@@ -40,7 +40,7 @@ SCHEMAS: dict = {
             {"key": "role",       "prompt": "Their role or title?",                             "type": "text",    "required": True},
             {"key": "city",       "prompt": "City? (e.g. Bangalore, Mumbai)",                   "type": "text",    "required": True},
             {"key": "industry",   "prompt": "Industry? (e.g. SaaS, Fintech, Retail)",           "type": "text",    "required": True},
-            {"key": "deal_value", "prompt": "Estimated deal value? (e.g. Rs50000, Rs5L) — or type `skip`", "type": "money", "required": False, "skip_phrase": "skip"},
+            {"key": "deal_value", "prompt": "Estimated deal value? (e.g. Rs50000, Rs5L) - or type `skip`", "type": "money", "required": False, "skip_phrase": "skip"},
         ],
     },
     "set_commitment": {
@@ -68,7 +68,7 @@ SCHEMAS: dict = {
         "fields": [
             {"key": "name",         "prompt": "Customer / company name?",                              "type": "text",  "required": True},
             {"key": "arr",          "prompt": "Annual contract value? (e.g. Rs5L, Rs1Cr)",            "type": "money", "required": True},
-            {"key": "renewal_date", "prompt": "Renewal date? (YYYY-MM-DD) — or type `skip`",          "type": "date",  "required": False, "skip_phrase": "skip"},
+            {"key": "renewal_date", "prompt": "Renewal date? (YYYY-MM-DD) - or type `skip`",          "type": "date",  "required": False, "skip_phrase": "skip"},
         ],
     },
     "log_nps": {
@@ -108,8 +108,8 @@ SCHEMAS: dict = {
         "fields": [
             {"key": "vendor",   "prompt": "Vendor / supplier name?",                       "type": "text",  "required": True},
             {"key": "amount",   "prompt": "Invoice amount? (e.g. Rs50000, Rs2L)",         "type": "money", "required": True},
-            {"key": "due_date", "prompt": "Due date? (YYYY-MM-DD) — or type `skip`",      "type": "date",  "required": False, "skip_phrase": "skip"},
-            {"key": "category", "prompt": "Category? (software / travel / marketing) — or `skip`", "type": "text", "required": False, "skip_phrase": "skip"},
+            {"key": "due_date", "prompt": "Due date? (YYYY-MM-DD) - or type `skip`",      "type": "date",  "required": False, "skip_phrase": "skip"},
+            {"key": "category", "prompt": "Category? (software / travel / marketing) - or `skip`", "type": "text", "required": False, "skip_phrase": "skip"},
         ],
     },
     "add_expense": {
@@ -119,7 +119,7 @@ SCHEMAS: dict = {
             {"key": "submitter",    "prompt": "Who is submitting? (name or type 'me')",              "type": "text",  "required": True},
             {"key": "amount",       "prompt": "Amount? (e.g. Rs3200, Rs500)",                       "type": "money", "required": True},
             {"key": "category",     "prompt": "Category? (travel / meals / equipment / other)",     "type": "text",  "required": True},
-            {"key": "expense_date", "prompt": "Date of expense? (YYYY-MM-DD) — or `today`",        "type": "date",  "required": False, "skip_phrase": "today"},
+            {"key": "expense_date", "prompt": "Date of expense? (YYYY-MM-DD) - or `today`",        "type": "date",  "required": False, "skip_phrase": "today"},
         ],
     },
     "reject_invoice": {
@@ -145,8 +145,8 @@ SCHEMAS: dict = {
         "agent": "BlogAgent",
         "fields": [
             {"key": "topic", "prompt": "Topic or target keyword for the blog post?",                             "type": "text", "required": True},
-            {"key": "geo",   "prompt": "Target geography? (e.g. Bangalore, India) — or `skip`",                 "type": "text", "required": False, "skip_phrase": "skip"},
-            {"key": "tone",  "prompt": "Tone? (informative / persuasive / technical) — or `skip`",             "type": "text", "required": False, "skip_phrase": "skip"},
+            {"key": "geo",   "prompt": "Target geography? (e.g. Bangalore, India) - or `skip`",                 "type": "text", "required": False, "skip_phrase": "skip"},
+            {"key": "tone",  "prompt": "Tone? (informative / persuasive / technical) - or `skip`",             "type": "text", "required": False, "skip_phrase": "skip"},
         ],
     },
 }
@@ -192,10 +192,10 @@ def start(tenant_id: str, room_id: str, sender: str, agent: str,
 
     total  = len(schema["fields"])
     first  = schema["fields"][0]
-    opt_hint = "" if first.get("required", True) else f" _(optional — type `{first.get('skip_phrase', 'skip')}` to skip)_"
+    opt_hint = "" if first.get("required", True) else f" _(optional - type `{first.get('skip_phrase', 'skip')}` to skip)_"
 
     client.post_message(
-        f"*{schema['title']}* — 1 of {total}\n"
+        f"*{schema['title']}* - 1 of {total}\n"
         f"{first['prompt']}{opt_hint}\n"
         f"_(Type `cancel` at any time to abort)_"
     )
@@ -249,7 +249,7 @@ def resume(tenant_id: str, room_id: str, sender: str, agent: str,
     field = fields[step]
     skip  = field.get("skip_phrase", "skip")
 
-    # Optional field — accept skip
+    # Optional field - accept skip
     if not field.get("required", True) and text.lower() in (skip.lower(), "skip"):
         collected[field["key"]] = None
     else:
@@ -269,7 +269,7 @@ def resume(tenant_id: str, room_id: str, sender: str, agent: str,
         nf       = fields[next_step]
         num      = next_step + 1
         total    = len(fields)
-        opt_hint = "" if nf.get("required", True) else f" _(optional — type `{nf.get('skip_phrase', 'skip')}` to skip)_"
+        opt_hint = "" if nf.get("required", True) else f" _(optional - type `{nf.get('skip_phrase', 'skip')}` to skip)_"
         client.post_message(f"Step {num} of {total}\n{nf['prompt']}{opt_hint}")
 
     return True

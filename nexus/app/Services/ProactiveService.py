@@ -1,5 +1,5 @@
 """
-Proactive Intelligence — unprompted signals across all agents.
+Proactive Intelligence - unprompted signals across all agents.
 Called by each agent's scheduler every 6 hours (configurable).
 """
 import os
@@ -97,7 +97,7 @@ def _support_proactive(client, tenant_id: str):
         for r in recurring:
             client.post_message(
                 f"*Recurring error detected ({r['cnt']}x in 24h):* {r['description'][:120]}\n"
-                f"This is a systematic issue — recommend root-cause investigation."
+                f"This is a systematic issue - recommend root-cause investigation."
             )
 
     with db_cursor() as cur:
@@ -120,7 +120,7 @@ def _support_proactive(client, tenant_id: str):
         for s in spikes:
             client.post_message(
                 f"*Customer bug spike:* {s['customer']} filed {s['recent_cnt']} bugs this week. "
-                f"Consider proactive outreach — flag CSAgent."
+                f"Consider proactive outreach - flag CSAgent."
             )
 
 
@@ -186,7 +186,7 @@ def _blog_proactive(client, tenant_id: str):
         lines = ["*Posts approaching 90-day refresh window:*"]
         for p in stale_posts:
             days = (datetime.utcnow() - p["published_at"]).days
-            lines.append(f"- {p['keyword']}: published {days}d ago — consider refreshing")
+            lines.append(f"- {p['keyword']}: published {days}d ago - consider refreshing")
         client.post_message("\n".join(lines))
 
     with db_cursor() as cur:
@@ -206,7 +206,7 @@ def _blog_proactive(client, tenant_id: str):
     if stale_drafts:
         lines = [f"*{len(stale_drafts)} draft(s) awaiting approval > 48h:*"]
         for d in stale_drafts:
-            lines.append(f"- #{d['id']} {d['keyword']} — reply `approve` or `reject`")
+            lines.append(f"- #{d['id']} {d['keyword']} - reply `approve` or `reject`")
         client.post_message("\n".join(lines))
 
 
@@ -270,7 +270,7 @@ def _finance_proactive(client, tenant_id: str):
             warnings.append(f"- {b['name']}: {pct}% burned ({_fmt_v(b['spent'])} of {_fmt_v(b['allocated'])})")
 
     if warnings:
-        client.post_message("*Budget alert — high burn rate:*\n" + "\n".join(warnings))
+        client.post_message("*Budget alert - high burn rate:*\n" + "\n".join(warnings))
 
     with db_cursor() as cur:
         cur.execute(

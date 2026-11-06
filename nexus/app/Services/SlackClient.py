@@ -67,7 +67,7 @@ def _dispatch_slash(channel_id: str, body: dict, internal_text: str, bolt_client
 
 
 def _register_slash_commands(app):
-    """Register all 25 slash commands — modal-openers and text-dispatch."""
+    """Register all 25 slash commands - modal-openers and text-dispatch."""
     finance_ch = lambda: os.getenv("SLACK_CHANNEL_ID_FINANCE", "")
 
     # Commands that open a Slack modal form
@@ -144,6 +144,41 @@ def _register_slash_commands(app):
         app.command(cmd)(_make_handler(fn))
 
 
+_AGENT_ROOMS = {
+    "SalesAgent":   "nexus-sales",
+    "FinanceAgent": "nexus-finance",
+    "CSAgent":      "nexus-cs",
+    "SupportAgent": "nexus-support",
+    "GeoSEOAgent":  "nexus-growth",
+    "BlogAgent":    "nexus-content",
+    "InfraAgent":   "nexus-devops",
+}
+
+
+def _handle_nexus_status(channel_id: str):
+    """Handle /nexus status - calls list_agents() and renders live Switch presence."""
+    entry = _channel_registry.get(channel_id)
+    if not entry:
+        return
+    switch_client, _ = entry
+    agents = switch_client.list_agents()
+    online_names = {a.get("name") for a in agents}
+
+    lines = []
+    for name, room in _AGENT_ROOMS.items():
+        indicator = "🟢" if name in online_names else "🔴"
+        status    = "online " if name in online_names else "offline"
+        lines.append(f"{indicator} {status}  *{name}*  `{room}`")
+
+    from app.Services.BlockBuilder import _header, _section, _divider, _context
+    switch_client.post_blocks([
+        _header("🔌 NEXUS Agent Status"),
+        _divider(),
+        _section("\n".join(lines)),
+        _context("_Live query via Switch `list_agents()` - WebSocket presence_"),
+    ], fallback_text="NEXUS Agent Status")
+
+
 def _register_global_handlers(app):
     """Register event handlers on the shared app exactly once."""
 
@@ -195,7 +230,7 @@ def _register_global_handlers(app):
         if not entry:
             return
         client, cb = entry
-        # Skip if it's a mention — already handled by on_mention
+        # Skip if it's a mention - already handled by on_mention
         if _bot_user_id and f"<@{_bot_user_id}>" in event.get("text", ""):
             return
         payload = _build_payload(client, event, is_mention=False)
@@ -207,13 +242,19 @@ def _register_global_handlers(app):
     def on_nexus_command(ack, command, client):
         ack()
         channel_id = command.get("channel_id", "")
+        text       = command.get("text", "").strip().lower()
+
+        if text == "status":
+            _handle_nexus_status(channel_id)
+            return
+
         entry      = _channel_registry.get(channel_id)
         tenant_id  = entry[0].tenant_id if entry else "default"
         from app.Services.ModalService import open_modal
         open_modal(
             trigger_id=command["trigger_id"],
             command=command["command"],          # e.g. "/nexus-customer"
-            text=command.get("text", "").strip().lower(),
+            text=text,
             channel_id=channel_id,
             tenant_id=tenant_id,
             user_id=command.get("user_id", ""),
@@ -250,7 +291,7 @@ def _build_payload(client, event: dict, is_mention: bool) -> dict:
 
 class SlackClient:
     """
-    Drop-in replacement for SwitchClient — same public interface so all
+    Drop-in replacement for SwitchClient - same public interface so all
     agent handlers work without modification.
 
     All instances in the same process share one Bolt app and one Socket Mode
@@ -325,7 +366,7 @@ class SlackClient:
             self.post_message(message, room_id=channel)
             logger.info(f"Signal sent to {target_name} ({channel})")
         else:
-            logger.info(f"{target_name} Slack channel not configured — skipping signal")
+            logger.info(f"{target_name} Slack channel not configured - skipping signal")
 
     def list_agents(self) -> list:
         return []

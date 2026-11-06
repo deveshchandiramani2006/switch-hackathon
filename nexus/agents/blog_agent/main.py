@@ -18,7 +18,7 @@ from .scheduler import start_blog_scheduler
 
 
 def _make_client(tenant_id: str):
-    # Switch is the primary transport — agents connect to Switch rooms,
+    # Switch is the primary transport - agents connect to Switch rooms,
     # Switch Console bridges to Slack/Teams/Discord
     agent_id = os.getenv("SWITCH_AGENT_ID_BLOG", "")
     api_key  = os.getenv("SWITCH_API_KEY_BLOG", "")
@@ -28,7 +28,7 @@ def _make_client(tenant_id: str):
         logger.info("BlogAgent using Switch")
         return SwitchClient("BlogAgent", api_key, agent_id, room_id, tenant_id)
 
-    # Slack Bolt fallback — only used when Switch Console is not running
+    # Slack Bolt fallback - only used when Switch Console is not running
     bot_token  = os.getenv("SLACK_BOT_TOKEN", "")
     app_token  = os.getenv("SLACK_APP_TOKEN", "")
     channel_id = os.getenv("SLACK_CHANNEL_ID_CONTENT", "")

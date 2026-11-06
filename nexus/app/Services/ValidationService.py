@@ -1,5 +1,5 @@
 """
-ValidationService — field-level validation with helpful error messages.
+ValidationService - field-level validation with helpful error messages.
 
 Each validator returns (parsed_value, error_msg).
 error_msg is None if valid; a descriptive string if not.
@@ -38,7 +38,7 @@ def validate_money(s: str) -> tuple:
             return 0, "Amount cannot be negative"
         return val, None
     except (ValueError, IndexError):
-        return 0, f"Invalid amount '{s}' — use: Rs50000, Rs5L, Rs1Cr, or just 50000"
+        return 0, f"Invalid amount '{s}' - use: Rs50000, Rs5L, Rs1Cr, or just 50000"
 
 
 def validate_date(s: str) -> tuple:
@@ -83,7 +83,7 @@ def validate_date(s: str) -> tuple:
         except ValueError:
             continue
 
-    return None, f"Invalid date '{s}' — use YYYY-MM-DD (e.g. 2026-11-15) or 'today' / 'tomorrow'"
+    return None, f"Invalid date '{s}' - use YYYY-MM-DD (e.g. 2026-11-15) or 'today' / 'tomorrow'"
 
 
 def validate_url(s: str) -> tuple:
@@ -93,7 +93,7 @@ def validate_url(s: str) -> tuple:
 
     s = s.strip()
     if not (s.startswith("http://") or s.startswith("https://")):
-        return "", f"URL must start with https:// — got: '{s}'"
+        return "", f"URL must start with https:// - got: '{s}'"
 
     pattern = r'^https?://[^\s/$.?#].[^\s]*$'
     if not re.match(pattern, s):
@@ -107,12 +107,12 @@ def validate_integer(s: str, min_val: int = None, max_val: int = None) -> tuple:
     try:
         val = int(str(s).strip())
     except (ValueError, AttributeError):
-        return 0, f"Must be a whole number — got: '{s}'"
+        return 0, f"Must be a whole number - got: '{s}'"
 
     if min_val is not None and val < min_val:
-        return 0, f"Must be at least {min_val} — got {val}"
+        return 0, f"Must be at least {min_val} - got {val}"
     if max_val is not None and val > max_val:
-        return 0, f"Must be at most {max_val} — got {val}"
+        return 0, f"Must be at most {max_val} - got {val}"
 
     return val, None
 
@@ -127,7 +127,7 @@ def validate_severity(s: str) -> tuple:
     }
     s = s.strip().upper()
     if s not in valid:
-        lines = [f"Invalid severity '{s}' — use:"]
+        lines = [f"Invalid severity '{s}' - use:"]
         for k, v in valid.items():
             lines.append(f"  {k}: {v}")
         return "", "\n".join(lines)
@@ -139,5 +139,5 @@ def validate_role(s: str) -> tuple:
     valid = ("admin", "manager", "member", "viewer")
     s = s.strip().lower()
     if s not in valid:
-        return "", f"Invalid role '{s}' — use: {', '.join(valid)}"
+        return "", f"Invalid role '{s}' - use: {', '.join(valid)}"
     return s, None

@@ -1,5 +1,5 @@
 """
-register_agents.py — Register all 7 NEXUS agents with Switch.
+register_agents.py - Register all 7 NEXUS agents with Switch.
 
 Run this once after Switch Console is running:
     cd nexus/
@@ -93,7 +93,7 @@ def main():
             print()
             success += 1
         except Exception as e:
-            print(f"# {agent['name']} — FAILED: {e}")
+            print(f"# {agent['name']} - FAILED: {e}")
             print()
 
     print("=" * 60)

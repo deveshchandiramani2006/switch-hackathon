@@ -122,11 +122,20 @@ def cmd_follow_up(client, text: str, sender: str, tenant_id: str):
     if not lead:
         client.post_message(f"Lead '{name}' not found.")
         return
+    # Read recent room context from Switch to personalize the follow-up
+    context_msgs = client.read_context(limit=5)
+    context_str = ""
+    if context_msgs:
+        recent = [m.get("text", "") for m in context_msgs if m.get("text")][:3]
+        if recent:
+            context_str = "\n\nRecent room context:\n" + "\n".join(f"- {m}" for m in recent)
+
     draft = llm.complete(
         f"Write a short, professional follow-up message for {lead['name']} "
         f"({lead['role']} at {lead['company'] or lead['city']}, {lead['industry']} industry). "
         f"They are in {lead['stage']} stage. Deal value: {format_value(lead['deal_value'])}. "
         f"Keep it under 4 sentences. Friendly but professional tone."
+        f"{context_str}"
     )
     from app.Services.BlockBuilder import _header, _quote_llm
     client.post_blocks([
@@ -175,6 +184,24 @@ def cmd_format_data(client, data: dict, sender: str, tenant_id: str):
     client.post_message(f"*Formatted ({tone}):*\n\n{formatted}")
 
 
+_DEAL_WON_TARGETS = {
+    "CSAgent":      lambda name, amount: f"DEAL_WON: customer={name} arr={amount} renewal_date=",
+    "FinanceAgent": lambda name, amount: f"DEAL_WON: customer={name} amount={amount}",
+}
+
+
+def _broadcast_deal_won(client, won_name: str, won_amount):
+    """Dynamic fan-out via Switch: one list_agents() call, signal all subscribed agents."""
+    agents = client.list_agents()
+    online = {a["name"]: a["id"] for a in agents}
+    for target_name, signal_fn in _DEAL_WON_TARGETS.items():
+        if target_name in online:
+            client.send_targeted_message(online[target_name], signal_fn(won_name, won_amount))
+            logger.info("DEAL_WON fired to %s (online)", target_name)
+        else:
+            logger.info("DEAL_WON skipped %s (offline)", target_name)
+
+
 def cmd_won(client, text: str, sender: str, tenant_id: str):
     name = text.split(":", 1)[1].strip() if ":" in text else ""
     with db_cursor() as cur:
@@ -190,16 +217,7 @@ def cmd_won(client, text: str, sender: str, tenant_id: str):
             deal_won(row["name"], format_value(row["deal_value"])),
             fallback_text=f"Deal won: {row['name']} · {format_value(row['deal_value'])}"
         )
-        won_name   = row["name"].replace(" ", "_")
-        won_amount = row["deal_value"]
-        client.safe_signal(
-            "CSAgent",
-            f"DEAL_WON: customer={won_name} arr={won_amount} renewal_date="
-        )
-        client.safe_signal(
-            "FinanceAgent",
-            f"DEAL_WON: customer={won_name} amount={won_amount}"
-        )
+        _broadcast_deal_won(client, row["name"].replace(" ", "_"), row["deal_value"])
     else:
         client.post_message(f"Lead '{name}' not found.")
 
@@ -282,10 +300,7 @@ def cmd_won_data(client, data: dict, sender: str, tenant_id: str):
             deal_won(row["name"], format_value(row["deal_value"])),
             fallback_text=f"Deal won: {row['name']} {format_value(row['deal_value'])}"
         )
-        won_name   = row["name"].replace(" ", "_")
-        won_amount = row["deal_value"]
-        client.safe_signal("CSAgent", f"DEAL_WON: customer={won_name} arr={won_amount} renewal_date=")
-        client.safe_signal("FinanceAgent", f"DEAL_WON: customer={won_name} amount={won_amount}")
+        _broadcast_deal_won(client, row["name"].replace(" ", "_"), row["deal_value"])
     else:
         client.post_message(f"Lead '{name}' not found.")
 
@@ -302,11 +317,20 @@ def cmd_follow_up_data(client, data: dict, sender: str, tenant_id: str):
     if not lead:
         client.post_message(f"Lead '{name}' not found.")
         return
+    # Read recent room context from Switch to personalize the follow-up
+    context_msgs = client.read_context(limit=5)
+    context_str = ""
+    if context_msgs:
+        recent = [m.get("text", "") for m in context_msgs if m.get("text")][:3]
+        if recent:
+            context_str = "\n\nRecent room context:\n" + "\n".join(f"- {m}" for m in recent)
+
     draft = llm.complete(
         f"Write a short, professional follow-up message for {lead['name']} "
         f"({lead['role']} at {lead.get('company') or lead['city']}, {lead['industry']} industry). "
         f"They are in {lead['stage']} stage. Deal value: {format_value(lead['deal_value'])}. "
         f"Keep it under 4 sentences. Friendly but professional tone."
+        f"{context_str}"
     )
     from app.Services.BlockBuilder import _header, _quote_llm
     client.post_blocks([

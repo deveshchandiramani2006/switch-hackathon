@@ -114,6 +114,6 @@ def require_master_key_with_rate_limit(f):
         if auth != f"Bearer {MASTER_KEY}":
             abort(401, "Unauthorized")
         if not _check_rate_limit(auth):
-            return jsonify({"error": "Rate limit exceeded — 120 req/min"}), 429
+            return jsonify({"error": "Rate limit exceeded - 120 req/min"}), 429
         return f(*args, **kwargs)
     return decorated

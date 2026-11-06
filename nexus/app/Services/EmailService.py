@@ -1,13 +1,13 @@
 """
-EmailService — SMTP email sender with SendGrid fallback.
+EmailService - SMTP email sender with SendGrid fallback.
 
-Required env vars (optional — if not set, emails are logged but not sent):
-  EMAIL_HOST     — SMTP host (e.g. smtp.gmail.com)
-  EMAIL_PORT     — SMTP port (default 587)
-  EMAIL_USER     — SMTP username
-  EMAIL_PASS     — SMTP password
-  EMAIL_FROM     — From address (default: noreply@nexus.ai)
-  SENDGRID_API_KEY — Alternative: use SendGrid instead of raw SMTP
+Required env vars (optional - if not set, emails are logged but not sent):
+  EMAIL_HOST     - SMTP host (e.g. smtp.gmail.com)
+  EMAIL_PORT     - SMTP port (default 587)
+  EMAIL_USER     - SMTP username
+  EMAIL_PASS     - SMTP password
+  EMAIL_FROM     - From address (default: noreply@nexus.ai)
+  SENDGRID_API_KEY - Alternative: use SendGrid instead of raw SMTP
 """
 import os
 import logging
@@ -31,7 +31,7 @@ class EmailService:
         If no email config is set, logs and returns False gracefully.
         """
         if not to or "@" not in to:
-            logger.debug(f"EmailService: invalid/missing recipient '{to}' — skipping")
+            logger.debug(f"EmailService: invalid/missing recipient '{to}' - skipping")
             return False
 
         if SENDGRID_KEY:

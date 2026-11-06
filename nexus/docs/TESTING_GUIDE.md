@@ -1,356 +1,341 @@
 # NEXUS Testing Guide
 
-## How to Talk to Agents
+All commands are Slack slash commands. There are no `@mention` commands - everything goes through the 25 registered slash commands.
 
-- Mention `@nexus` in the channel — the agent responds
-- Type `@nexus help` in any channel to see all available commands for that agent
-- **Buttons on responses** — click them instead of typing follow-up commands
-- All commands are case-insensitive
+Before running any test flows, confirm all agents are online:
+
+```
+/nexus status
+```
+
+You should see 7 green indicators. If any agent is offline, check [docs/SETUP.md](SETUP.md) troubleshooting.
 
 ---
 
-## Test Flow 1 — Sales Pipeline (start here)
+## Test Flow 1 - Sales Pipeline
 
 **Channel:** `#nexus-sales`
 
-### Step 1 — Add a lead
-```
-@nexus new lead: Rahul Sharma, CTO, Mumbai, SaaS, Rs500000
-```
-**Expected:** Card with lead details + `📋 Pipeline` and `💬 Follow Up` buttons
+### Step 1 - Add a lead
 
-### Step 2 — View pipeline
-```
-@nexus pipeline
-```
-**Expected:** Each lead shown with `💬 Follow Up`, `🏆 Won`, `❌ Lost` buttons
+Type `/new-lead` - a modal opens. Fill in:
+- **Name**: Rahul Sharma
+- **Role**: CTO
+- **City**: Mumbai
+- **Industry**: SaaS
+- **Deal Value**: Rs500000
 
-### Step 3 — Follow up on a lead
-```
-@nexus follow up: Rahul Sharma
-```
-**Expected:** LLM-generated follow-up suggestion based on lead context
+Click **Submit**.
 
-### Step 4 — Try the guided wizard (no parameters needed)
-```
-@nexus new lead
-```
-**Expected:** Agent asks for name, then role, city, industry, deal value — one field at a time
+**Expected:** Lead card in `#nexus-sales` with Follow Up and Won/Lost buttons.
 
-### Step 5 — Mark as won (triggers cross-agent flow)
-```
-@nexus won: Rahul Sharma
-```
-**Expected:**
-- SalesAgent confirms win in `#nexus-sales`
-- FinanceAgent auto-logs revenue in `#nexus-finance`
-- CSAgent auto-onboards customer in `#nexus-cs`
+### Step 2 - View the pipeline
 
-### Step 6 — Check stale leads
 ```
-@nexus stale leads
+/pipeline
 ```
-**Expected:** Any leads untouched for 7+ days
 
-### Other commands
+**Expected:** All active leads sorted by deal value, each with Follow Up, Won, and Lost buttons.
+
+### Step 3 - Generate a follow-up
+
 ```
-@nexus lead: Rahul Sharma        → view full lead detail
-@nexus lost: Rahul Sharma -- reason: budget constraints
-@nexus set commitment            → guided form for sales commitment
-@nexus patterns                  → patterns the agent has learned
-@nexus memory                    → recent decisions and events
-@nexus knowledge: pricing        → search agent knowledge base
+/follow-up Rahul Sharma
 ```
+
+**Expected:** LLM-generated follow-up message draft based on lead context (role, city, industry).
+
+### Step 4 - Set a commitment
+
+Type `/commitment` - modal opens. Set a commitment tied to Rahul Sharma with a due date.
+
+### Step 5 - Mark as won (triggers cross-agent chain)
+
+```
+/won Rahul Sharma
+```
+
+**Expected - watch three channels simultaneously:**
+- `#nexus-sales`: SalesAgent confirms the win
+- `#nexus-finance`: FinanceAgent auto-logs a revenue invoice
+- `#nexus-cs`: CSAgent auto-creates a customer record
+
+This is Chain 1 - DEAL_WON over Switch `send_targeted_message`. SalesAgent calls `list_agents()` to discover FinanceAgent and CSAgent at runtime.
+
+### Step 6 - Mark as lost
+
+```
+/lost Rahul Sharma
+```
+
+**Expected:** Lead status updates to Closed-Lost.
 
 ---
 
-## Test Flow 2 — Finance (best to test after a won deal)
+## Test Flow 2 - Finance
 
 **Channel:** `#nexus-finance`
 
-### Step 1 — Log an invoice
-```
-@nexus invoice: AWS, Rs75000, due: 2026-11-30, category: infrastructure
-```
-**Expected:** Invoice card with `✅ Approve` and `❌ Reject` buttons — no typing needed
+> Run after Test Flow 1 to see the auto-created invoice from Chain 1.
 
-### Step 2 — Approve via button
-Click `✅ Approve` on the invoice card.
-**Expected:** Status updates to approved
+### Step 1 - Log an invoice
 
-### Step 3 — List all invoices
-```
-@nexus invoices
-```
-**Expected:** Each pending invoice shows `✅ Approve` and `❌ Reject` buttons
+Type `/invoice` - modal opens. Fill in:
+- **Vendor**: AWS
+- **Amount**: Rs75000
+- **Due Date**: 2026-11-30
+- **Category**: infrastructure
 
-### Step 4 — Log an expense
-```
-@nexus expense: Priya Kapoor, Rs3200, travel, 2026-11-05
-```
-Or use the guided wizard:
-```
-@nexus expense
-```
+**Expected:** Invoice card with Approve and Reject buttons.
 
-### Step 5 — Reports
-```
-@nexus overdue               → overdue invoices
-@nexus expenses pending      → expenses waiting approval
-@nexus weekly report         → revenue, expenses, cash flow
-@nexus forecast              → LLM financial forecast
-@nexus budget: infrastructure → budget usage for a category
-```
+### Step 2 - Approve via button
 
-### Other commands
-```
-@nexus approve: invoice-001
-@nexus reject: invoice-001, reason: duplicate
-```
+Click **Approve** on the invoice card.
+
+**Expected:** Card updates to Approved status inline.
+
+### Step 3 - Reject with reason
+
+Type `/reject` - modal opens. Enter an invoice ID and rejection reason.
+
+**Expected:** Card updates to Rejected with the reason shown.
+
+### Step 4 - Log an expense
+
+Type `/expense` - modal opens. Fill in submitter name, amount, category, and date.
+
+**Expected:** Expense card with pending status.
 
 ---
 
-## Test Flow 3 — Support Bugs
+## Test Flow 3 - Support Bugs
 
 **Channel:** `#nexus-support`
 
-### Step 1 — Log a bug
-```
-@nexus bug: Checkout page crashes on payment step, severity: P1
-```
-**Expected:** Bug card with `📋 All Bugs` and `✅ Close` buttons
+### Step 1 - Log a P1 bug (triggers cross-agent chain)
 
-### Step 2 — View all bugs
-```
-@nexus status
-```
-**Expected:** All open bugs listed by priority
+Type `/bug` - modal opens. Fill in:
+- **Description**: Checkout page crashes on payment step
+- **Severity**: P1
 
-### Step 3 — Filter bugs
+Click **Submit**.
+
+**Expected - watch two channels:**
+- `#nexus-support`: Bug card filed with severity badge and Resolve button
+- `#nexus-cs`: SupportAgent fires P1_BREACH to CSAgent → at-risk alert for affected accounts
+
+This is Chain 2 - P1_BREACH over Switch `send_targeted_message`.
+
+### Step 2 - Log a P0 bug
+
+Type `/bug` again with severity P0. Same chain fires.
+
+### Step 3 - View all bugs
+
 ```
-@nexus bugs: open P0
-@nexus bugs: open P1
+/bugs
 ```
 
-### Step 4 — Close a bug
-Click `✅ Close` on the bug card, or type:
+**Expected:** All open bugs listed by priority, each with a Resolve button.
+
+### Step 4 - Resolve a bug
+
 ```
-@nexus close: #1
+/resolve #1
 ```
 
-> Note: Logging a P0 or P1 bug auto-fires a signal to CSAgent to flag the affected customer.
+Or click **Resolve** on the bug card.
 
-### Other commands
-```
-@nexus patterns       → recurring bug patterns detected
-@nexus memory         → recent triage decisions
-@nexus knowledge: auth → search bug knowledge base
-```
+**Expected:** Bug status updates to Resolved.
 
 ---
 
-## Test Flow 4 — Customer Success
+## Test Flow 4 - Customer Success
 
 **Channel:** `#nexus-cs`
 
-> CSAgent gets customers automatically when SalesAgent marks a deal won. You can also add manually.
+> CSAgent gets customers automatically from Chain 1 (DEAL_WON). You can also add manually.
 
-### Step 1 — Add a customer manually
-```
-@nexus add customer: TechCorp, Rs800000, renewal: 2027-01-15
-```
+### Step 1 - Add a customer manually
 
-### Step 2 — Health check
-```
-@nexus health: TechCorp
-```
-**Expected:** LLM-generated health score + risk assessment
+Type `/customer` - modal opens. Fill in company name, ARR, and renewal date.
 
-### Step 3 — At-risk customers
+### Step 2 - Health check
+
 ```
-@nexus at-risk
+/health TechCorp
 ```
 
-### Step 4 — Log NPS
+**Expected:** LLM-generated health score (0–100) + risk signals (NPS, ticket volume, renewal proximity).
+
+### Step 3 - Expansion analysis
+
 ```
-@nexus nps: TechCorp, score: 8, note: great onboarding experience
-```
-Or guided:
-```
-@nexus nps
+/expansion TechCorp
 ```
 
-### Step 5 — Renewals
+**Expected:** LLM-generated upsell and cross-sell recommendations.
+
+### Step 4 - QBR prep
+
 ```
-@nexus renewals          → renewals in next 30 days
-@nexus renewals: 60      → renewals in next 60 days
+/qbr TechCorp
 ```
 
-### Other commands
-```
-@nexus expansion: TechCorp    → expansion opportunity analysis
-@nexus qbr: TechCorp          → QBR prep notes
-@nexus weekly report          → CS team summary
-```
+**Expected:** LLM-generated QBR agenda with talking points.
+
+### Step 5 - Log an NPS score
+
+Type `/nps` - modal opens. Enter customer name, score (0–10), and a note.
 
 ---
 
-## Test Flow 5 — Blog Content
+## Test Flow 5 - GEO Score and Content Brief
 
-**Channel:** `#nexus-content`
+**Channels:** `#nexus-growth` then `#nexus-content`
 
-### Step 1 — Generate a draft
+### Step 1 - Run a GEO score (triggers cross-agent chain)
+
 ```
-@nexus draft: 5 reasons startups need invoicing software
-```
-**Expected:** Draft card with `✅ Approve`, `👁 Preview`, `❌ Reject` buttons
-
-### Step 2 — Preview before approving
-Click `👁 Preview` on the draft card.
-**Expected:** Full draft text posted
-
-### Step 3 — Approve
-Click `✅ Approve` on the draft card.
-Or approve with edits:
-```
-approve #1 -- edit: change CTA to start free trial
+/geo invoicing software india
 ```
 
-### Step 4 — Reject
-Click `❌ Reject`, or:
+**Expected:**
+- If score >= 7: Score card with current citability rating and improvement notes
+- If score < 7: Score card PLUS BlogAgent receives a CONTENT_BRIEF signal in `#nexus-content` automatically
+
+This is Chain 3 - CONTENT_BRIEF over Switch `send_targeted_message`.
+
+### Step 2 - Track a keyword
+
+Type `/track` - modal opens. Add `invoicing software india` to tracking.
+
+### Step 3 - Check the content queue
+
+Switch to `#nexus-content`:
+
 ```
-reject #1 -- reason: too promotional
+/queue
 ```
 
-### Step 5 — Queue view
-```
-@nexus queue
-```
-**Expected:** Each pending draft shows `✅ Approve`, `👁 Preview`, `❌ Reject` buttons
+**Expected:** If Chain 3 fired, you should see a pending draft for the keyword.
 
-### Step 6 — Guided wizard
-```
-@nexus draft
-```
-**Expected:** Agent asks for topic, tone, keywords one by one
+### Step 4 - Generate a manual draft
 
-### Other commands
+Type `/draft` - modal opens. Fill in topic and target geo.
+
+**Expected:** Draft card with Approve and Reject buttons.
+
+### Step 5 - Approve a draft
+
 ```
-@nexus delegate to @username    → delegate a draft for review
-@nexus patterns                 → content formats that perform well
-@nexus memory                   → recent drafts and decisions
-@nexus knowledge: SEO           → search content knowledge base
+/approve 1
 ```
+
+**Expected:** Draft status updates to Published inline. Card does not disappear - it updates in place.
 
 ---
 
-## Test Flow 6 — GEO & SEO
+## Test Flow 6 - Infra Monitoring
 
-**Channel:** `#nexus-growth`
+**Channels:** `#nexus-devops` then `#nexus-support`
 
-### Step 1 — Track a keyword
-```
-@nexus track: invoicing software india
-```
+### Step 1 - Register a service
 
-### Step 2 — GEO score (Generative Engine Optimization)
-```
-@nexus geo check: invoicing software india
-```
-**Expected:** Score card (1–10) with `💡 Get Improvement Tips` button if score < 8
+Type `/service` - modal opens. Fill in:
+- **Name**: google
+- **URL**: https://google.com
 
-### Step 3 — Get improvement tips
-Click `💡 Get Improvement Tips`, or:
-```
-@nexus geo tips: invoicing software india
-```
-**Expected:** LLM recommendations to get cited in ChatGPT, Perplexity, Google AI Overviews
+### Step 2 - Ping a service
 
-### Step 4 — Run GEO cycle for all keywords
 ```
-@nexus geo run
+/ping https://google.com
 ```
 
-### Step 5 — GEO report
-```
-@nexus geo report
-```
-**Expected:** Citation rates per keyword
+**Expected:** Live HTTP response - status code and latency in milliseconds.
 
-### Step 6 — Traditional SEO
-```
-@nexus run now         → check Google rankings for all tracked keywords
-@nexus trending        → top keywords by volume
-@nexus report          → SEO summary — total keywords, content queue size
-@nexus queue           → content briefs queued for BlogAgent
-```
+### Step 3 - Trigger Chain 4 (Service Down)
+
+To test the automatic monitoring chain, register a service with a URL that returns errors or is unreachable. Wait for two consecutive background health check cycles.
+
+**Expected - watch two channels:**
+- `#nexus-devops`: InfraAgent posts a service-down alert
+- `#nexus-support`: SupportAgent auto-files a P0 bug (InfraAgent fires SERVICE_DOWN via Switch)
+
+This is Chain 4 - SERVICE_DOWN over Switch `send_targeted_message`. SupportAgent has `addressing_mode: owner_and_owner_agents` - only InfraAgent can file this P0, not a user.
 
 ---
 
-## Test Flow 7 — Infra Monitoring
+## Verifying Switch Coordination
 
-**Channel:** `#nexus-devops`
+The five cross-agent chains only work because of Switch. Here is how to verify the transport is active and signals are flowing.
 
-### Step 1 — Add a service to monitor
+### Check all agents are online
+
 ```
-@nexus add: google -> https://google.com
-```
-Or guided:
-```
-@nexus add
+/nexus status
 ```
 
-### Step 2 — View service health
-```
-@nexus status
-```
-**Expected:** Each service shown with `🔁 Ping Now` button
+This calls `list_agents()` live and shows online/offline status for all 7 agents. If any agent shows offline, the signal chains involving it will silently drop.
 
-### Step 3 — Ping a service
-Click `🔁 Ping Now`, or:
-```
-@nexus ping: https://google.com
-```
+### Watch a signal fire in real time
 
-### Other commands
-```
-@nexus jobs    → scheduled monitoring jobs
-```
+1. Open `#nexus-sales` and `#nexus-finance` side by side
+2. Run `/won Test Customer` in `#nexus-sales`
+3. Watch `#nexus-finance` - FinanceAgent should respond within 2–3 seconds
+
+The latency between the win confirmation in Sales and the invoice creation in Finance is the Switch round-trip time. No Slack automation, no Zapier, no cron job - it is a direct agent-to-agent signal.
+
+### Verify addressing mode enforcement
+
+Try this from a regular user account (not an agent):
+1. Directly call CSAgent's Switch room as a user
+2. Attempt to send a message formatted as `P1_BREACH`
+
+**Expected:** Message rejected at the Switch protocol level. CSAgent has `addressing_mode: owner_and_owner_agents` - only registered agents can send it signals.
 
 ---
 
-## Cross-Agent Flows (automatic — no manual trigger)
+## Cross-Agent Chains - Full Reference
 
-These fire automatically. Test them by running the trigger command and watching the other channels.
+| Trigger | Channel | What you do | Fires | Watch in |
+|---------|---------|-------------|-------|----------|
+| Chain 1 | `#nexus-sales` | `/won Name` | DEAL_WON → FinanceAgent + CSAgent | `#nexus-finance` + `#nexus-cs` |
+| Chain 2 | `#nexus-support` | `/bug` with P0 or P1 | P1_BREACH → CSAgent | `#nexus-cs` |
+| Chain 3 | `#nexus-growth` | `/geo Keyword` (score < 7) | CONTENT_BRIEF → BlogAgent | `#nexus-content` |
+| Chain 4 | `#nexus-devops` | 2 health check failures (automatic) | SERVICE_DOWN → SupportAgent | `#nexus-support` |
+| Chain 5 | `#nexus-finance` | Invoice 30+ days overdue (nightly) | INVOICE_OVERDUE → SalesAgent | `#nexus-sales` |
 
-| Trigger in | What you do | Auto fires in |
-|-----------|------------|---------------|
-| `#nexus-sales` | `@nexus won: Lead Name` | FinanceAgent logs revenue in `#nexus-finance` |
-| `#nexus-sales` | `@nexus won: Lead Name` | CSAgent onboards customer in `#nexus-cs` |
-| `#nexus-support` | Log a P0 or P1 bug | CSAgent gets a P1_BREACH alert in `#nexus-cs` |
-| `#nexus-growth` | GeoSEO finds trending keyword | BlogAgent gets a content brief in `#nexus-content` |
-| `#nexus-growth` | GEO score < 7 for a keyword | BlogAgent gets a GEO optimization brief in `#nexus-content` |
-| `#nexus-content` | Blog post published | GeoSEOAgent starts tracking the post's keyword rankings in `#nexus-growth` |
+All chains use `send_targeted_message()` with targets discovered at runtime via `list_agents()`.
 
 ---
 
 ## Troubleshooting
 
-**Bot doesn't respond at all:**
-1. Check it's in the channel: `/invite @nexus`
-2. Check events are subscribed: api.slack.com/apps → Event Subscriptions → `app_mention` + `message.channels`
-3. Check agent is running: `ps aux | grep agent`
-4. Check logs: `tail -f /tmp/geo_agent.log`
+**Slash commands return "dispatch_failed"**
+- Confirm Switch Console is running and bridged to the workspace
+- Run `/nexus status` - if any agent shows offline, restart it: `docker compose up <agent_name> -d`
 
-**Buttons don't work:**
-- Make sure `interactivity` is enabled in Slack app settings → Interactivity & Shortcuts → toggle ON
+**Agent responds but cross-agent chain does not fire**
+- Run `/nexus status` - confirm the target agent is online
+- Check agent logs for the signal: `docker compose logs sales_agent -f | grep DEAL_WON`
+- Verify `SWITCH_AGENT_ID_*` vars are set for the target agent
 
-**LLM responses are slow:**
-- Ollama must be running: `curl http://localhost:11434/api/tags`
-- Model must exist: should show `llama3.2:latest`
+**Modal does not open**
+- Confirm Interactivity is enabled: api.slack.com/apps → your app → **Interactivity & Shortcuts** → toggle ON
+
+**LLM responses are slow or missing**
+- Check `LLM_MOCK_MODE` in `.env` - set to `true` to use canned responses
+- If using Ollama: `curl http://localhost:11434/api/tags` - confirm `llama3.2:latest` is listed
 - Pull if missing: `ollama pull llama3.2`
 
-**Database errors:**
+**Database errors**
 ```bash
-python3 database/migrations/migrate.py
+python database/migrate_fresh.py
+```
+
+**"LLM daily limit reached"**
+```bash
+docker compose exec postgres psql -U nexus -c \
+  "UPDATE tenants SET llm_calls_today=0 WHERE tenant_id='default';"
 ```

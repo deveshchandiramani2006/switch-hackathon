@@ -1,5 +1,5 @@
 """
-CSAgent message handler — routes commands and cross-agent signals.
+CSAgent message handler - routes commands and cross-agent signals.
 Cross-agent in:
   - DEAL_WON from SalesAgent → auto-create customer
   - P1_BREACH from SupportAgent → flag at-risk

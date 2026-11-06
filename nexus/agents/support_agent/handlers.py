@@ -30,6 +30,10 @@ def handle_message(client, payload: dict):
     room_id    = payload.get("room_id", client.room_id)
     tenant_id  = client.tenant_id
 
+    if text.startswith("SERVICE_DOWN:"):
+        _auto_file_service_bug(client, text, tenant_id)
+        return
+
     if sender in ("SupportAgent", "NEXUS"):
         return
     if not text and not payload.get("is_mention"):
@@ -238,6 +242,21 @@ def cmd_close_bug_data(client, data: dict, sender: str, tenant_id: str):
         client.post_message(f"✅ Bug #{bug_id} closed")
     else:
         client.post_message(f"Bug #{bug_id} not found.")
+
+
+def _auto_file_service_bug(client, signal: str, tenant_id: str):
+    """Auto-files a P1 bug when InfraAgent detects a service outage."""
+    # Parse: SERVICE_DOWN: name=checkout-api url=https://... failures=3
+    parts = {}
+    for token in signal.replace("SERVICE_DOWN:", "").strip().split():
+        if "=" in token:
+            k, v = token.split("=", 1)
+            parts[k] = v
+    name     = parts.get("name", "unknown-service")
+    url      = parts.get("url", "")
+    failures = parts.get("failures", "2")
+    description = f"Service '{name}' is down. {failures} consecutive health check failures. URL: {url}"
+    triage_bug(client, description, "InfraAgent", tenant_id)
 
 
 def filter_bugs(client, filter_str: str, tenant_id: str):

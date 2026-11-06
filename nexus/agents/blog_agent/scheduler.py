@@ -1,5 +1,5 @@
 """
-BlogAgent scheduler — digest + proactive checks + approval expiration checks.
+BlogAgent scheduler - digest + proactive checks + approval expiration checks.
 """
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler

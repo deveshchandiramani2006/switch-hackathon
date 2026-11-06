@@ -1,5 +1,5 @@
 """
-Agent Memory — event logging, pattern extraction, knowledge search.
+Agent Memory - event logging, pattern extraction, knowledge search.
 All agents call AgentMemory(agent, tenant_id) to remember outcomes and extract patterns.
 """
 import json

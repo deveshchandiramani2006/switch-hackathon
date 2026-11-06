@@ -185,9 +185,9 @@ def check_approval_expirations(client, agent_name: str, tenant_id: str = "defaul
             required   = req["required_approvers"] or []
             pending_ap = [r for r in required if r not in received]
             msg = (
-                f"*Approval timed out* — {req['item_type']} #{req['item_id']}\n"
+                f"*Approval timed out* - {req['item_type']} #{req['item_id']}\n"
                 f"Still waiting on: {', '.join(pending_ap) if pending_ap else 'all approvers'}\n"
-                f"Action needed — re-queuing for review."
+                f"Action needed - re-queuing for review."
             )
             client.post_message(msg)
 

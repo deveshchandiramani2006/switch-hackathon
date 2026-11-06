@@ -37,7 +37,7 @@ def handle_message(client, payload: dict):
         handle_brief(client, text, tenant_id=tenant_id)
         return
 
-    # GEO score signal — low AI-friendliness score → auto-draft improved content
+    # GEO score signal - low AI-friendliness score → auto-draft improved content
     if text.startswith("GEO_OPTIMIZE:"):
         # Parse: "GEO_OPTIMIZE: keyword=X score=Y domain=Z"
         parts = {}
@@ -93,7 +93,7 @@ def handle_message(client, payload: dict):
     elif t.startswith("preview:"):
         preview_draft(client, clean.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("approve:"):
-        # approve: change CTA to "Book a demo" — approve with edits (uses top draft for backwards compat)
+        # approve: change CTA to "Book a demo" - approve with edits (uses top draft for backwards compat)
         edit_instruction = clean.split(":", 1)[1].strip()
         approve_top_draft(client, sender, tenant_id, with_edits=edit_instruction)
     elif t.startswith("delegate to"):

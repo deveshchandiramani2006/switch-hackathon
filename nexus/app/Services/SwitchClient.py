@@ -136,7 +136,7 @@ class SwitchClient:
             self.send_targeted_message(target["id"], message)
             logger.info(f"Signal sent to {target_name}")
         else:
-            logger.info(f"{target_name} not deployed — skipping signal")
+            logger.info(f"{target_name} not deployed - skipping signal")
 
     def read_context(self, room_id: str = None, limit: int = 10) -> list:
         """Fetch recent messages from a Switch room for LLM context."""

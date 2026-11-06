@@ -1,5 +1,5 @@
 """
-OnboardingService — step-by-step setup wizard for new tenants.
+OnboardingService - step-by-step setup wizard for new tenants.
 
 Steps:
   0: Welcome + verify connection
@@ -42,7 +42,7 @@ STEPS = [
         "title": "Escalation Contact",
         "message": (
             "*Step 3 of 4:* Test a command\n\n"
-            "Try your first command — type:\n"
+            "Try your first command - type:\n"
             "`@SalesAgent pipeline`\n\n"
             "_(Once you send it, I'll confirm setup is working)_"
         ),

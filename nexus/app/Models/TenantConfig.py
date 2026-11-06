@@ -1,5 +1,5 @@
 """
-TenantConfig — per-tenant configuration stored in DB (tenant_configs table).
+TenantConfig - per-tenant configuration stored in DB (tenant_configs table).
 
 Replaces the single company.yaml file with per-tenant JSONB config in Postgres.
 Each tenant has its own escalation chains, integrations, thresholds, and agent flags.
@@ -114,7 +114,7 @@ class TenantConfig:
                     values
                 )
                 if cur.rowcount == 0:
-                    # Row doesn't exist — insert with defaults first
+                    # Row doesn't exist - insert with defaults first
                     import json as _json
                     cur.execute(
                         "INSERT INTO tenant_configs (tenant_id) VALUES (%s) ON CONFLICT (tenant_id) DO NOTHING",

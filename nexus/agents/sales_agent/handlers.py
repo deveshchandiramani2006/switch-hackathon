@@ -16,6 +16,10 @@ def handle_message(client, payload: dict):
     is_mention = payload.get("is_mention", False)
     tenant_id  = client.tenant_id
 
+    if text.startswith("INVOICE_OVERDUE:"):
+        _handle_invoice_overdue(client, text, tenant_id)
+        return
+
     if sender in ("SalesAgent", "NEXUS"):
         return
     if not text and not payload.get("is_mention"):
@@ -171,3 +175,24 @@ def _cmd_knowledge(client, query: str, tenant_id: str):
     for r in results[:5]:
         lines.append(f"- [{r['event_type']}] {str(r['outcome'] or r['context'] or '')[:100]}")
     client.post_message("\n".join(lines))
+
+
+def _handle_invoice_overdue(client, signal: str, tenant_id: str):
+    """Flag account when FinanceAgent reports a 30+ day overdue invoice."""
+    parts = {}
+    for token in signal.replace("INVOICE_OVERDUE:", "").strip().split():
+        if "=" in token:
+            k, v = token.split("=", 1)
+            parts[k] = v
+    customer = parts.get("customer", "Unknown")
+    amount   = parts.get("amount", "0")
+    days     = parts.get("days", "30")
+    from app.Services.BlockBuilder import _header, _section, _fields
+    client.post_blocks([
+        _header("⚠️ Overdue Invoice - Account Flagged"),
+        _fields(
+            f"*Customer*\n{customer}",
+            f"*Amount*\n{amount}",
+        ),
+        _section(f"Invoice {days} days overdue. Follow up with this account.\n_Signal from FinanceAgent via Switch_"),
+    ], fallback_text=f"Overdue invoice: {customer} {days} days")

@@ -1,5 +1,5 @@
 """
-UserIdentityService — maps Switch sender usernames to tenant users with roles.
+UserIdentityService - maps Switch sender usernames to tenant users with roles.
 
 Roles: admin > manager > member > viewer
 Auto-creates 'member' on first interaction (configurable per tenant).

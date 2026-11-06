@@ -76,7 +76,7 @@ def run_seeder():
     cur.close()
     conn.close()
     print("Demo data seeded.")
-    print("  Ankit's commitment is 3 days overdue — escalation fires on next check.")
+    print("  Ankit's commitment is 3 days overdue - escalation fires on next check.")
 
 
 if __name__ == "__main__":

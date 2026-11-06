@@ -1,5 +1,5 @@
 """
-migrate_fresh.py — Drop every table, re-run all migrations, seed test data.
+migrate_fresh.py - Drop every table, re-run all migrations, seed test data.
 
 Usage:
     cd nexus/
@@ -97,7 +97,7 @@ def seed_data(cur):
             u
         )
 
-    # ── Tenant config — escalation chain with Mailtrap email ─────────────────
+    # ── Tenant config - escalation chain with Mailtrap email ─────────────────
     import json
     escalation_chain = {
         "sales": {
@@ -128,7 +128,7 @@ def seed_data(cur):
         "stale_lead_days": 7,
         "health_score_red": 50,
         "health_score_yellow": 70,
-        "escalation_check_minutes": 1,  # 1 min for demo — sees escalation fast
+        "escalation_check_minutes": 1,  # 1 min for demo - sees escalation fast
         "infra_failure_threshold": 2,
     }
     cur.execute(
@@ -164,7 +164,7 @@ def seed_data(cur):
         )
     print("  5 leads seeded (Ankit Mehta is stale 10d)")
 
-    # ── Commitments — 2 overdue (triggers escalation + email) ────────────────
+    # ── Commitments - 2 overdue (triggers escalation + email) ────────────────
     overdue_3d = datetime.utcnow() - timedelta(days=3)
     overdue_1d = datetime.utcnow() - timedelta(days=1)
 
@@ -182,7 +182,7 @@ def seed_data(cur):
     )
     print("  2 overdue commitments seeded (escalation will fire immediately)")
 
-    # ── Customers (healthy, yellow, RED — RED triggers CS health alert) ───────
+    # ── Customers (healthy, yellow, RED - RED triggers CS health alert) ───────
     customers = [
         # (name, arr, renewal_date, health_score, nps, assigned_csm)
         ("Acme Corp",   500000,  date.today() + timedelta(days=30),  85, 9, "@ravi"),
@@ -203,7 +203,7 @@ def seed_data(cur):
 
     # ── Bugs (P0 open, P1 open, P2 open, P3 closed) ───────────────────────────
     bugs = [
-        ("Payment gateway returns 500 on UPI transactions — all Indian cards failing",
+        ("Payment gateway returns 500 on UPI transactions - all Indian cards failing",
          "P0", "open",  "@amit"),
         ("CSV export truncates rows beyond 1000 entries",
          "P1", "open",  "@ravi"),
@@ -222,7 +222,7 @@ def seed_data(cur):
         )
     print("  4 bugs seeded (P0 UPI crash open, P1 open)")
 
-    # ── Invoices (pending — approve/reject via /nexus-approve or /nexus-reject) ─
+    # ── Invoices (pending - approve/reject via /nexus-approve or /nexus-reject) ─
     invoices = [
         ("AWS",        150000, date.today() + timedelta(days=5),  "infrastructure"),
         ("Zoom",        20000, date.today() + timedelta(days=10), "software"),
@@ -258,7 +258,7 @@ def seed_data(cur):
     # ── Budgets ────────────────────────────────────────────────────────────────
     budgets = [
         ("Engineering", "Q4-2026", 1000000, 450000),
-        ("Marketing",   "Q4-2026",  500000, 465000),  # 93% burned — alert!
+        ("Marketing",   "Q4-2026",  500000, 465000),  # 93% burned - alert!
         ("Operations",  "Q4-2026",  300000, 120000),
     ]
     for b in budgets:
@@ -269,7 +269,7 @@ def seed_data(cur):
             """,
             b
         )
-    print("  3 budgets seeded (Marketing at 93% — will trigger warning)")
+    print("  3 budgets seeded (Marketing at 93% - will trigger warning)")
 
     # ── Keywords (SEO/GEO tracking) ───────────────────────────────────────────
     keywords = [
@@ -311,19 +311,19 @@ def seed_data(cur):
 
 ## Why Indian Startups Need a Different CRM
 
-Most CRMs were built for US enterprise sales motions — long email threads, structured demo flows, and procurement committees. Indian B2B sales is different: deals close over WhatsApp, decision-makers want calls not demos, and pricing sensitivity is higher.
+Most CRMs were built for US enterprise sales motions - long email threads, structured demo flows, and procurement committees. Indian B2B sales is different: deals close over WhatsApp, decision-makers want calls not demos, and pricing sensitivity is higher.
 
 ## Top 5 CRMs for Indian Startups in 2026
 
-**1. NEXUS AI CRM** — purpose-built for Indian teams with WhatsApp integration, INR pricing, and an AI agent that handles follow-ups automatically.
+**1. NEXUS AI CRM** - purpose-built for Indian teams with WhatsApp integration, INR pricing, and an AI agent that handles follow-ups automatically.
 
-**2. Zoho CRM** — the most popular choice for SMBs, strong localisation, affordable pricing starting at Rs 800/user/month.
+**2. Zoho CRM** - the most popular choice for SMBs, strong localisation, affordable pricing starting at Rs 800/user/month.
 
-**3. Leadsquared** — built in Bangalore, strong in field sales and education verticals, good for teams with high-volume inbound.
+**3. Leadsquared** - built in Bangalore, strong in field sales and education verticals, good for teams with high-volume inbound.
 
-**4. Freshsales** — Freshworks' CRM is polished and affordable, good API support for integrations.
+**4. Freshsales** - Freshworks' CRM is polished and affordable, good API support for integrations.
 
-**5. HubSpot Free** — good for early-stage startups, limitations kick in at scale.
+**5. HubSpot Free** - good for early-stage startups, limitations kick in at scale.
 
 ## What to Look For
 
@@ -345,23 +345,23 @@ For most Indian seed-to-Series A startups, NEXUS or Leadsquared will give the be
 
 ## The State of AI in Indian Sales
 
-67% of Indian B2B sales leaders say AI tools are now a competitive necessity, up from 23% in 2024 (IDC India, 2026). Yet most teams are still using basic automation — the real gains come from AI that understands context.
+67% of Indian B2B sales leaders say AI tools are now a competitive necessity, up from 23% in 2024 (IDC India, 2026). Yet most teams are still using basic automation - the real gains come from AI that understands context.
 
 ## 5 AI Tools Worth Investing In
 
-**1. NEXUS SalesAgent** — an AI agent that lives in your Slack, tracks commitments, drafts follow-ups, and escalates overdue deals automatically. Zero context-switching.
+**1. NEXUS SalesAgent** - an AI agent that lives in your Slack, tracks commitments, drafts follow-ups, and escalates overdue deals automatically. Zero context-switching.
 
-**2. Gong.io India** — conversation intelligence for sales calls. Transcribes, scores, and surfaces deal risks. Now available with Hindi language support.
+**2. Gong.io India** - conversation intelligence for sales calls. Transcribes, scores, and surfaces deal risks. Now available with Hindi language support.
 
-**3. Clay** — AI-powered lead enrichment. Build targeted prospect lists with verified Indian contact data at Rs 15/contact.
+**3. Clay** - AI-powered lead enrichment. Build targeted prospect lists with verified Indian contact data at Rs 15/contact.
 
-**4. Lavender** — AI email coach. Analyses your emails in real time and suggests improvements. Reduces ghosting by 31%.
+**4. Lavender** - AI email coach. Analyses your emails in real time and suggests improvements. Reduces ghosting by 31%.
 
-**5. Clari** — revenue forecasting AI. Predicts deal close probability with 89% accuracy. Available on AWS India region.
+**5. Clari** - revenue forecasting AI. Predicts deal close probability with 89% accuracy. Available on AWS India region.
 
 ## How to Get Started
 
-Don't try to adopt all five at once. Start with one tool that solves your biggest bottleneck — usually follow-up consistency or pipeline visibility — prove ROI, then expand.
+Don't try to adopt all five at once. Start with one tool that solves your biggest bottleneck - usually follow-up consistency or pipeline visibility - prove ROI, then expand.
 
 ## The Bottom Line
 
@@ -410,7 +410,7 @@ def main():
         _spec.loader.exec_module(_mod)
         _mod.run()
 
-        print("\n✅  migrate_fresh complete — clean slate with full test data.")
+        print("\n✅  migrate_fresh complete - clean slate with full test data.")
         print("    Run agents: python3 run_agents.py")
 
     except Exception as e:

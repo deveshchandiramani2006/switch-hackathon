@@ -39,11 +39,11 @@ def _post_to_switch(agent_key: str, room_id: str, text: str):
     agent_id = os.getenv("SWITCH_AGENT_ID_VOICE")
     api_key  = os.getenv("SWITCH_API_KEY_VOICE")
     if not agent_id or not api_key:
-        logger.info("SWITCH_AGENT_ID_VOICE / SWITCH_API_KEY_VOICE not set — skipping Switch post")
+        logger.info("SWITCH_AGENT_ID_VOICE / SWITCH_API_KEY_VOICE not set - skipping Switch post")
         return False
     target_room = room_id or os.getenv(AGENT_ROOM_ENV.get(agent_key, "SWITCH_ROOM_ID_SALES"), "")
     if not target_room:
-        logger.warning(f"No room ID for agent '{agent_key}' — cannot post to Switch")
+        logger.warning(f"No room ID for agent '{agent_key}' - cannot post to Switch")
         return False
     try:
         requests.post(

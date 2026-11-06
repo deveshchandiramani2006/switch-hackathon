@@ -1,5 +1,5 @@
 """
-CSAgent scheduler — daily digest, weekly report, at-risk sweep, proactive checks.
+CSAgent scheduler - daily digest, weekly report, at-risk sweep, proactive checks.
 """
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler

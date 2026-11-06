@@ -1,5 +1,5 @@
 """
-demo_slack_setup.py — Clear all bot messages from every channel, then post
+demo_slack_setup.py - Clear all bot messages from every channel, then post
 polished demo cards showing the seeded data state.
 
 Called automatically at the end of migrate_fresh.py.
@@ -31,7 +31,7 @@ CHANNELS = {
     "devops":  os.getenv("SLACK_CHANNEL_ID_DEVOPS",  ""),
 }
 
-# Thumbnail images — consistent picsum seeds (same seed = same photo every time)
+# Thumbnail images - consistent picsum seeds (same seed = same photo every time)
 IMGS = {
     "ai_sales": "https://picsum.photos/seed/ai-sales-india/800/400",
     "crm":      "https://picsum.photos/seed/crm-startups/800/400",
@@ -115,7 +115,7 @@ def setup_sales(wc, ch):
     today = date.today()
 
     post(wc, ch, [
-        _hdr("🌅 Sales Dashboard — Today's Snapshot"),
+        _hdr("🌅 Sales Dashboard - Today's Snapshot"),
         _ctx(f"*{today.strftime('%A, %b %d %Y')}*  ·  5 active leads  ·  2 overdue commitments"),
     ])
 
@@ -158,7 +158,7 @@ def setup_sales(wc, ch):
     post(wc, ch, [
         _div(),
         _s("⚠️ *Ankit Mehta*  ·  VP Ops, PayCo  ·  Rs 2.0L"),
-        _ctx("Stage: *Qualified*", "Hyderabad · Fintech", "🕰️ _Stale — 10 days untouched_"),
+        _ctx("Stage: *Qualified*", "Hyderabad · Fintech", "🕰️ _Stale - 10 days untouched_"),
         _actions(_btn("💬 Follow Up", "follow up: Ankit Mehta"),
                  _btn("🏆 Won", "won: Ankit Mehta", "primary")),
     ])
@@ -167,13 +167,13 @@ def setup_sales(wc, ch):
 
     post(wc, ch, [
         _div(),
-        _s("🚨 *Ankit Mehta* — Send internal sign-off"),
+        _s("🚨 *Ankit Mehta* - Send internal sign-off"),
         _ctx("Deadline: 3 days ago", "Escalation Level 1 → @ravi notified"),
     ])
 
     post(wc, ch, [
         _div(),
-        _s("🔴 *Priya Sharma* — Share legal review doc"),
+        _s("🔴 *Priya Sharma* - Share legal review doc"),
         _ctx("Deadline: yesterday", "Escalation Level 1 → @ravi notified"),
         _ctx("_Escalation runs every minute. Email fires at Level 3 → Mailtrap inbox_"),
     ])
@@ -190,11 +190,11 @@ def setup_cs(wc, ch):
         _ctx(f"*{today.strftime('%A, %b %d %Y')}*  ·  5 customers  ·  2 at risk  ·  2 renewals this month"),
     ])
 
-    post(wc, ch, [_hdr("🚨 Health Alerts — Action Required")])
+    post(wc, ch, [_hdr("🚨 Health Alerts - Action Required")])
 
     post(wc, ch, [
         _div(),
-        _s("🔴 *TechStack* — Health score: 35/100"),
+        _s("🔴 *TechStack* - Health score: 35/100"),
         _ctx("ARR: Rs 2.0L", "NPS: 5", "CSM: @ravi", "Renewal: in 90 days"),
         _actions(_btn("🩺 Health Check", "health: TechStack"),
                  _btn("📈 Expansion", "expansion: TechStack")),
@@ -202,8 +202,8 @@ def setup_cs(wc, ch):
 
     post(wc, ch, [
         _div(),
-        _s("🔴 *CloudBase* — Health score: 48/100"),
-        _ctx("ARR: Rs 7.5L", "NPS: 4", f"⚠️ Renewal: *{renew10}* — only 10 days away!"),
+        _s("🔴 *CloudBase* - Health score: 48/100"),
+        _ctx("ARR: Rs 7.5L", "NPS: 4", f"⚠️ Renewal: *{renew10}* - only 10 days away!"),
         _actions(_btn("🩺 Health Check", "health: CloudBase"),
                  _btn("📋 QBR Agenda", "qbr: CloudBase")),
     ])
@@ -212,7 +212,7 @@ def setup_cs(wc, ch):
 
     post(wc, ch, [
         _div(),
-        _s(f"⚠️ *RetailEdge* — Renewal {renew15}  ·  Rs 3.0L"),
+        _s(f"⚠️ *RetailEdge* - Renewal {renew15}  ·  Rs 3.0L"),
         _ctx("Health: 🟡 60/100", "NPS: 7"),
         _actions(_btn("📋 QBR Agenda", "qbr: RetailEdge"),
                  _btn("📈 Expansion", "expansion: RetailEdge")),
@@ -220,7 +220,7 @@ def setup_cs(wc, ch):
 
     post(wc, ch, [
         _div(),
-        _s(f"📅 *Acme Corp* — Renewal {renew30}  ·  Rs 5.0L"),
+        _s(f"📅 *Acme Corp* - Renewal {renew30}  ·  Rs 5.0L"),
         _ctx("Health: 🟢 85/100", "NPS: 9"),
         _actions(_btn("📈 Expansion", "expansion: Acme Corp"),
                  _btn("📋 QBR Agenda", "qbr: Acme Corp")),
@@ -235,13 +235,13 @@ def setup_cs(wc, ch):
 
 def setup_support(wc, ch):
     post(wc, ch, [
-        _hdr("🐛 Bug Tracker — Open Issues"),
+        _hdr("🐛 Bug Tracker - Open Issues"),
         _ctx("4 total  ·  1 P0  ·  1 P1  ·  1 P2"),
     ])
 
     post(wc, ch, [
         _div(),
-        _s("🚨 *P0* — Bug #1\nPayment gateway returns 500 on UPI transactions — all Indian cards failing"),
+        _s("🚨 *P0* - Bug #1\nPayment gateway returns 500 on UPI transactions - all Indian cards failing"),
         _ctx("Reported by: @amit", "_open_  ·  Source: manual"),
         _actions(_btn("✅ Close Bug", "close: #1", "primary"),
                  _btn("📋 All Bugs", "status")),
@@ -249,14 +249,14 @@ def setup_support(wc, ch):
 
     post(wc, ch, [
         _div(),
-        _s("🔴 *P1* — Bug #2\nCSV export truncates rows beyond 1000 entries"),
+        _s("🔴 *P1* - Bug #2\nCSV export truncates rows beyond 1000 entries"),
         _ctx("Reported by: @ravi", "_open_"),
         _actions(_btn("✅ Close Bug", "close: #2", "primary")),
     ])
 
     post(wc, ch, [
         _div(),
-        _s("🟡 *P2* — Bug #3\nDashboard charts render blank on Firefox 120"),
+        _s("🟡 *P2* - Bug #3\nDashboard charts render blank on Firefox 120"),
         _ctx("Reported by: @amit", "_open_"),
         _actions(_btn("✅ Close Bug", "close: #3", "primary")),
     ])
@@ -278,11 +278,11 @@ def setup_finance(wc, ch):
         _ctx(f"*{today.strftime('%A, %b %d %Y')}*  ·  4 invoices pending  ·  3 expense claims  ·  1 overdue"),
     ])
 
-    post(wc, ch, [_hdr("🧾 Invoices — Pending Approval")])
+    post(wc, ch, [_hdr("🧾 Invoices - Pending Approval")])
 
     post(wc, ch, [
         _div(),
-        _s(f"⚠️ *Google Ads* — Rs 80K  ·  Overdue since {overdue}"),
+        _s(f"⚠️ *Google Ads* - Rs 80K  ·  Overdue since {overdue}"),
         _ctx("Invoice #3", "Category: marketing"),
         _actions(_btn("✅ Approve", "approve: invoice-3", "primary"),
                  _btn("❌ Reject",  "reject: invoice-3",  "danger")),
@@ -290,7 +290,7 @@ def setup_finance(wc, ch):
 
     post(wc, ch, [
         _div(),
-        _s("⏳ *AWS* — Rs 1.5L"),
+        _s("⏳ *AWS* - Rs 1.5L"),
         _ctx("Invoice #1", "Category: infrastructure", f"Due: {due5}"),
         _actions(_btn("✅ Approve", "approve: invoice-1", "primary"),
                  _btn("❌ Reject",  "reject: invoice-1",  "danger")),
@@ -298,7 +298,7 @@ def setup_finance(wc, ch):
 
     post(wc, ch, [
         _div(),
-        _s("⏳ *HubSpot* — Rs 50K"),
+        _s("⏳ *HubSpot* - Rs 50K"),
         _ctx("Invoice #4", "Category: software", f"Due: {due20}"),
         _actions(_btn("✅ Approve", "approve: invoice-4", "primary"),
                  _btn("❌ Reject",  "reject: invoice-4",  "danger")),
@@ -306,7 +306,7 @@ def setup_finance(wc, ch):
 
     post(wc, ch, [
         _div(),
-        _s("⏳ *Zoom* — Rs 20K"),
+        _s("⏳ *Zoom* - Rs 20K"),
         _ctx("Invoice #2", "Category: software", f"Due: {due10}"),
         _actions(_btn("✅ Approve", "approve: invoice-2", "primary"),
                  _btn("❌ Reject",  "reject: invoice-2",  "danger")),
@@ -320,8 +320,8 @@ def setup_finance(wc, ch):
     ])
 
     post(wc, ch, [
-        _hdr("🧾 Expense Claims — Pending"),
-        _s("⏳ *Ravi* — Rs 8,500 · Travel\n⏳ *Devesh* — Rs 3,200 · Equipment\n⏳ *Amit* — Rs 1,500 · Meals"),
+        _hdr("🧾 Expense Claims - Pending"),
+        _s("⏳ *Ravi* - Rs 8,500 · Travel\n⏳ *Devesh* - Rs 3,200 · Equipment\n⏳ *Amit* - Rs 1,500 · Meals"),
         _ctx("3 claims pending  ·  Total: Rs 13,200"),
         _actions(_btn("📋 All Expenses", "expenses"),
                  _btn("📊 Budget: Engineering", "budget: Engineering")),
@@ -330,7 +330,7 @@ def setup_finance(wc, ch):
 
 def setup_content(wc, ch):
     post(wc, ch, [
-        _hdr("✍️ Content Queue — Drafts Ready for Approval"),
+        _hdr("✍️ Content Queue - Drafts Ready for Approval"),
         _ctx("2 drafts waiting  ·  Auto-generated by GeoSEO analysis  ·  Approve to publish"),
     ])
 
@@ -397,11 +397,11 @@ def setup_growth(wc, ch):
     post(wc, ch, [
         _div(),
         _s("🟢 *customer success software SaaS India*  ·  7/10"),
-        _ctx("Volume: 4,100/mo · Country: IN", "✅ Above threshold — no action needed"),
+        _ctx("Volume: 4,100/mo · Country: IN", "✅ Above threshold - no action needed"),
     ])
 
     post(wc, ch, [
-        _s("💡 *2 content briefs auto-sent to #content* — blog drafts ready for your approval"),
+        _s("💡 *2 content briefs auto-sent to #content* - blog drafts ready for your approval"),
         _ctx("Next GEO cycle: in 12 hours  ·  Next SEO rank check: in 24 hours"),
         _actions(_btn("🔄 Run GEO Now", "geo run"),
                  _btn("📊 Full Report", "geo report")),
@@ -448,13 +448,13 @@ SETUP_FNS = {
 
 def run():
     if not BOT_TOKEN:
-        print("  SLACK_BOT_TOKEN not set — skipping Slack setup")
+        print("  SLACK_BOT_TOKEN not set - skipping Slack setup")
         return
 
     try:
         from slack_sdk import WebClient
     except ImportError:
-        print("  slack_sdk not installed — skipping Slack setup")
+        print("  slack_sdk not installed - skipping Slack setup")
         return
 
     wc = _client()
@@ -462,14 +462,14 @@ def run():
 
     for name, channel_id in CHANNELS.items():
         if not channel_id:
-            print(f"  #{name}: channel ID not set — skipping")
+            print(f"  #{name}: channel ID not set - skipping")
             continue
         print(f"  #{name}:")
         clear_channel(wc, channel_id, name)
         SETUP_FNS[name](wc, channel_id)
         print(f"    demo cards posted ✓")
 
-    print("\n✅  Slack setup complete — all channels ready for demo.")
+    print("\n✅  Slack setup complete - all channels ready for demo.")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 """
-Daily 9 AM Digest — each agent posts a morning summary to its room.
+Daily 9 AM Digest - each agent posts a morning summary to its room.
 Called by each agent's scheduler at 9 AM.
 """
 import logging

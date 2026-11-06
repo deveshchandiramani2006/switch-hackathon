@@ -1,8 +1,8 @@
 """
-TenantResolver — resolves tenant_id for every incoming Switch message.
+TenantResolver - resolves tenant_id for every incoming Switch message.
 
 Resolution order:
-  1. TENANT_ID env var (fastest — used in isolated per-tenant Docker deployments)
+  1. TENANT_ID env var (fastest - used in isolated per-tenant Docker deployments)
   2. payload workspace_id → DB lookup
   3. payload room_id → DB room_mappings lookup
   4. Fall back to "default"

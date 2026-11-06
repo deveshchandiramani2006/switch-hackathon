@@ -1,5 +1,5 @@
 """
-FinanceAgent handler — invoice approvals, budget tracking, expense management.
+FinanceAgent handler - invoice approvals, budget tracking, expense management.
 Cross-agent in: DEAL_WON from SalesAgent → creates expected payment record.
 """
 import logging

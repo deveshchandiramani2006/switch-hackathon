@@ -1,5 +1,5 @@
 """
-Full BYOLLM router — 7 providers.
+Full BYOLLM router - 7 providers.
 Interface: LLMClient(agent="sales", tenant_config=None).complete(prompt, json_mode, system)
 Falls back to secondary provider on failure.
 """
@@ -43,7 +43,7 @@ class _CircuitBreaker:
                     self._state[provider] = s
                     return True
                 return False
-            return True  # half_open — let one through
+            return True  # half_open - let one through
 
     def on_success(self, provider: str):
         with self._lock:
@@ -115,9 +115,12 @@ class LLMClient:
     def complete(self, prompt: str, json_mode: bool = False, system: str = None,
                 tenant_id: str = None, client=None) -> str:
         """Route to correct provider with retry, feature gating, and fallback."""
+        if os.getenv("LLM_MOCK_MODE", "").lower() == "true":
+            return f"[MOCK] Response for: {prompt[:60]}..."
+
         import time
 
-        # Feature gate check — blocks if tenant hit daily LLM limit
+        # Feature gate check - blocks if tenant hit daily LLM limit
         if tenant_id and client:
             from app.Services.FeatureGateService import FeatureGateService
             if not FeatureGateService.gate_llm(tenant_id, client):
@@ -161,7 +164,7 @@ class LLMClient:
 
     def _dispatch(self, provider: str, model: str, prompt: str, json_mode: bool, system: str) -> str:
         if not _breaker.allow(provider):
-            raise RuntimeError(f"Circuit breaker OPEN for '{provider}' — skipping to fallback")
+            raise RuntimeError(f"Circuit breaker OPEN for '{provider}' - skipping to fallback")
         try:
             result = self._route(provider, model, prompt, json_mode, system)
             _breaker.on_success(provider)

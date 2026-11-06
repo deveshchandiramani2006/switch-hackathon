@@ -30,6 +30,14 @@ def start_finance_scheduler(client):
         id="finance_invoice_reminders"
     )
 
+    scheduler.add_job(
+        lambda: _overdue_signal(client),
+        "cron",
+        hour=9,
+        minute=15,
+        id="finance_overdue_signal"
+    )
+
     # Weekly Monday report
     scheduler.add_job(
         lambda: _weekly_report(client),
@@ -89,3 +97,32 @@ def _invoice_reminders(client):
 def _weekly_report(client):
     from agents.finance_agent.handlers import _cmd_weekly_report
     _cmd_weekly_report(client, client.tenant_id)
+
+
+def _overdue_signal(client):
+    """Fire INVOICE_OVERDUE signal to SalesAgent for invoices 30+ days past due."""
+    from app.Services.DatabaseService import db_cursor
+    try:
+        with db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT vendor, amount, due_date,
+                       CURRENT_DATE - due_date AS days_overdue
+                FROM invoices
+                WHERE tenant_id=%s AND status='pending'
+                  AND due_date < CURRENT_DATE - INTERVAL '30 days'
+                ORDER BY days_overdue DESC
+                """,
+                (client.tenant_id,)
+            )
+            overdue = cur.fetchall()
+
+        for inv in overdue:
+            client.safe_signal(
+                "SalesAgent",
+                f"INVOICE_OVERDUE: customer={inv['vendor']} "
+                f"amount={inv['amount']} days={inv['days_overdue']}"
+            )
+            logger.info(f"Fired INVOICE_OVERDUE signal for {inv['vendor']}")
+    except Exception as e:
+        logger.error(f"_overdue_signal failed: {e}")

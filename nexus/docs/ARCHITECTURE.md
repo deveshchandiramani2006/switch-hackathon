@@ -2,7 +2,7 @@
 
 ## Overview
 
-NEXUS is a multi-agent AI operations platform built on Switch. Six agents serve as the AI backbone for Sales, Support, CS, Finance, Content, and DevOps — all coordinated through Switch's persistent WebSocket and cross-agent messaging primitives.
+NEXUS is a multi-agent AI operations platform built on Switch. Six agents serve as the AI backbone for Sales, Support, CS, Finance, Content, and DevOps - all coordinated through Switch's persistent WebSocket and cross-agent messaging primitives.
 
 ```
 Switch Platform
@@ -19,7 +19,7 @@ Switch Platform
 
 ## Multi-Tenancy Model
 
-Each Docker container serves **one tenant** — tenant isolation by deployment, not by application logic.
+Each Docker container serves **one tenant** - tenant isolation by deployment, not by application logic.
 
 ```
 TENANT_ID (env var)
@@ -33,7 +33,7 @@ For shared-infra deployments (future), `TenantResolver` maps `workspace_id` or S
 | Table | Purpose |
 |-------|---------|
 | `tenant_users` | Per-tenant user registry with roles (admin/manager/member/viewer) |
-| `tenant_configs` | Per-tenant config in JSONB — replaces single company.yaml |
+| `tenant_configs` | Per-tenant config in JSONB - replaces single company.yaml |
 | `conversation_sessions` | Active modal wizard state (expires in 15 min) |
 | `approval_sessions` | Blog/invoice approval tracking with timeout and scoped approver |
 | `usage_events` | Every command execution logged for analytics (90-day rolling) |
@@ -45,26 +45,26 @@ For shared-infra deployments (future), `TenantResolver` maps `workspace_id` or S
 
 ```
 app/Services/
-├── SwitchClient.py          — WebSocket client (tenant_id, record_heartbeat())
-├── TenantResolver.py        — Resolves tenant from env var / workspace / room
-├── ConversationService.py   — Stateful modal wizard for multi-field commands
-├── ValidationService.py     — Field-level validators with helpful error messages
-├── UserIdentityService.py   — Sender → TenantUser with role hierarchy (enforced in handlers)
-├── FeatureGateService.py    — Subscription tier enforcement (called before all LLM ops)
-├── UsageAnalyticsService.py — Command execution logging (called in all route_command fns)
-├── OnboardingService.py     — 4-step setup wizard for new tenants
-├── LlmService.py            — Multi-provider LLM router, retry + backoff + circuit breaker
-├── BillingService.py        — Stripe checkout, webhook handler, plan management
-├── EmailService.py          — SMTP / SendGrid email sender (escalation fallback)
-├── DatabaseService.py       — psycopg2 context manager
-├── MemoryService.py         — Agent event log + pattern extraction
-├── ApprovalsService.py      — Approval request lifecycle
-├── DigestService.py         — Morning digest generator
-└── ProactiveService.py      — Unprompted intelligence signals
+├── SwitchClient.py          - WebSocket client (tenant_id, record_heartbeat())
+├── TenantResolver.py        - Resolves tenant from env var / workspace / room
+├── ConversationService.py   - Stateful modal wizard for multi-field commands
+├── ValidationService.py     - Field-level validators with helpful error messages
+├── UserIdentityService.py   - Sender → TenantUser with role hierarchy (enforced in handlers)
+├── FeatureGateService.py    - Subscription tier enforcement (called before all LLM ops)
+├── UsageAnalyticsService.py - Command execution logging (called in all route_command fns)
+├── OnboardingService.py     - 4-step setup wizard for new tenants
+├── LlmService.py            - Multi-provider LLM router, retry + backoff + circuit breaker
+├── BillingService.py        - Stripe checkout, webhook handler, plan management
+├── EmailService.py          - SMTP / SendGrid email sender (escalation fallback)
+├── DatabaseService.py       - psycopg2 context manager
+├── MemoryService.py         - Agent event log + pattern extraction
+├── ApprovalsService.py      - Approval request lifecycle
+├── DigestService.py         - Morning digest generator
+└── ProactiveService.py      - Unprompted intelligence signals
 
 app/Models/
-├── Tenant.py               — Tenant CRUD helpers
-└── TenantConfig.py         — Per-tenant config (escalation, thresholds, flags)
+├── Tenant.py               - Tenant CRUD helpers
+└── TenantConfig.py         - Per-tenant config (escalation, thresholds, flags)
 ```
 
 ---
@@ -76,13 +76,13 @@ Commands with ≥ 3 inputs trigger a guided in-channel wizard instead of requiri
 **Flow:**
 ```
 User: @SalesAgent new lead
-Bot:  New Lead — 1 of 5
+Bot:  New Lead - 1 of 5
       Lead's full name?
 User: Priya Sharma
 Bot:  Step 2 of 5
       Their role or title?
 ...  (continues for all fields)
-Bot:  Lead added (#12) — Priya Sharma — CTO @ Mumbai
+Bot:  Lead added (#12) - Priya Sharma - CTO @ Mumbai
 ```
 
 State stored in `conversation_sessions` table (tenant, room, sender, agent, step, collected JSONB). Sessions expire after 15 minutes; user can type `cancel` at any step.
@@ -108,7 +108,7 @@ Inline syntax still works for power users: `@SalesAgent new lead: Name, Role, Ci
 
 ## Approval Flow (Hardened)
 
-BlogAgent requires explicit draft IDs in approvals — prevents accidental triggers from unrelated messages.
+BlogAgent requires explicit draft IDs in approvals - prevents accidental triggers from unrelated messages.
 
 ```
 Bot:   Draft ready (#42)
@@ -136,7 +136,7 @@ Claude classifies: commitment_found=true, deadline=Friday
     ▼
 Stored in commitments table with deadline + tenant_id
     │
-    ▼  (escalation scheduler — interval from TenantConfig.thresholds)
+    ▼  (escalation scheduler - interval from TenantConfig.thresholds)
 Deadline passes, status=pending
     │
     ├─ Level 1 (wait_hours configurable per tenant): @rep notified
@@ -202,7 +202,7 @@ All endpoints require `Authorization: Bearer <MASTER_KEY>` unless noted.
 | PATCH | `/api/v1/tenants/{id}/users/{username}/role` | Set user role (audit-logged) |
 | GET | `/api/v1/tenants/{id}/agents/status` | Live agent heartbeat status |
 | GET | `/api/v1/tenants/{id}/audit-log` | Immutable audit trail |
-| DELETE | `/api/v1/tenants/{id}/purge` | GDPR hard delete — wipes all tenant data |
+| DELETE | `/api/v1/tenants/{id}/purge` | GDPR hard delete - wipes all tenant data |
 | GET | `/api/v1/tenants/{id}/billing` | Plan info + upgrade options |
 | POST | `/api/v1/tenants/{id}/billing/checkout` | Create Stripe checkout session |
 | PATCH | `/api/v1/tenants/{id}/billing/plan` | Admin plan override (audit-logged) |
@@ -218,9 +218,9 @@ X-Nexus-Signature: sha256=<hmac-sha256(webhook_secret, raw_body)>
 **Audit-logged operations:** tenant delete, config update, role change, webhook secret rotation, GDPR purge. Pass `X-Actor: <username>` header to attribute changes.
 
 **Agent liveness statuses:**
-- `alive` — heartbeat within last 10 min
-- `stale` — 10–30 min since last heartbeat
-- `dead` — 30+ min since last heartbeat
+- `alive` - heartbeat within last 10 min
+- `stale` - 10–30 min since last heartbeat
+- `dead` - 30+ min since last heartbeat
 
 ---
 
@@ -260,7 +260,7 @@ Auto-created as `member` on first interaction. Elevated via API or by admin.
 | `tenants` | Tenant registry |
 | `tenant_users` | Per-tenant user roster + roles |
 | `tenant_configs` | Escalation chains, thresholds, agent flags per tenant |
-| `leads` | CRM — prospect tracking |
+| `leads` | CRM - prospect tracking |
 | `commitments` | Customer/rep promises with deadlines |
 | `escalation_log` | Audit trail of all escalation messages |
 | `content_queue` | SEO brief → draft → published lifecycle |
@@ -293,6 +293,6 @@ Without Switch, the system degrades completely:
 - Cross-agent signals (`BRIEF:`, `POST_PUBLISHED:`, `DEAL_WON:`) cannot be delivered
 - The GeoSEO→Blog loop breaks
 - Escalation messages cannot be posted to rooms
-- Room addressing modes (`anyone` vs `owner_and_owner_agents`) control passive scan vs targeted — a Switch primitive
+- Room addressing modes (`anyone` vs `owner_and_owner_agents`) control passive scan vs targeted - a Switch primitive
 
 The system is architecturally dependent on Switch, not just integrated with it.

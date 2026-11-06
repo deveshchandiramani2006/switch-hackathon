@@ -59,6 +59,10 @@ def check_services(client):
                 f"URL: {svc['url']}\n"
                 f"Status: {f'HTTP {code}' if code else 'unreachable'}"
             )
+            client.safe_signal(
+                "SupportAgent",
+                f"SERVICE_DOWN: name={svc['name']} url={svc['url']} failures={fails}"
+            )
             logger.warning(f"Service {svc['name']} DOWN after {fails} failures")
 
 

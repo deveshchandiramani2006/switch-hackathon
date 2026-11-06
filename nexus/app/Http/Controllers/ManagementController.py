@@ -428,7 +428,7 @@ def get_audit_log(tenant_id):
 # ── GDPR hard delete ──────────────────────────────────────────────────────────
 
 def purge_tenant(tenant_id):
-    """Hard delete — wipes ALL data for the tenant then removes the tenant row."""
+    """Hard delete - wipes ALL data for the tenant then removes the tenant row."""
     if not tenant_exists(tenant_id):
         return jsonify({"error": "Tenant not found"}), 404
 

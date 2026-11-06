@@ -2,7 +2,7 @@
 Single-process launcher for all 7 NEXUS agents.
 
 Runs every agent in one Python process so they share a single Slack Bolt app
-and a single Socket Mode connection — Slack always delivers events to the
+and a single Socket Mode connection - Slack always delivers events to the
 right agent channel instead of distributing them randomly across 7 sockets.
 """
 import os
@@ -32,7 +32,7 @@ from app.Services.SlackClient import SlackClient
 def _client(agent_name: str, channel_env: str) -> SlackClient:
     channel_id = os.getenv(channel_env, "")
     if not channel_id:
-        logger.warning(f"{agent_name}: {channel_env} not set — agent will not receive messages")
+        logger.warning(f"{agent_name}: {channel_env} not set - agent will not receive messages")
     return SlackClient(agent_name, bot_token, app_token, channel_id, tenant_id)
 
 
@@ -88,7 +88,7 @@ geo_client.connect(geo_handle)
 blog_client.connect(blog_handle)
 infra_client.connect(infra_handle)
 
-logger.info("All 7 agents connected — one shared Socket Mode connection active.")
+logger.info("All 7 agents connected - one shared Socket Mode connection active.")
 logger.info("Channels registered:")
 for name, env in [
     ("SalesAgent",   "SLACK_CHANNEL_ID_SALES"),

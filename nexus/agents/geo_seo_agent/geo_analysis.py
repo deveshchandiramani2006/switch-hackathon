@@ -1,5 +1,5 @@
 """
-GEO — Generative Engine Optimization engine.
+GEO - Generative Engine Optimization engine.
 
 Uses the OpenAI-compatible chat API to score content and generate
 optimization recommendations. By default wired to local Ollama via
@@ -7,8 +7,8 @@ GEO_API_BASE / GEO_API_KEY env vars, but any OpenAI-compatible
 endpoint (real OpenAI, Groq, Together, etc.) works as a drop-in.
 
 Optional citation checks:
-  - Brave Search API  (GEO_BRAVE_API_KEY)   — 2000 free queries/month
-  - SerpAPI           (SERPAPI_KEY)          — checks Google AI Overview box
+  - Brave Search API  (GEO_BRAVE_API_KEY)   - 2000 free queries/month
+  - SerpAPI           (SERPAPI_KEY)          - checks Google AI Overview box
 """
 import os
 import json
@@ -165,7 +165,7 @@ def run_geo_cycle(client, tenant_id: str = "default"):
     target_domain = os.getenv("GEO_TARGET_DOMAIN", "")
     if not target_domain:
         client.post_message(
-            "GEO: `GEO_TARGET_DOMAIN` not set in .env — cannot check citations. "
+            "GEO: `GEO_TARGET_DOMAIN` not set in .env - cannot check citations. "
             "Set it to your domain (e.g. `yourdomain.com`) and re-run."
         )
         return

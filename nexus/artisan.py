@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NEXUS Artisan — project CLI tool.
+NEXUS Artisan - project CLI tool.
 
 Usage:
   python artisan.py migrate                           Run database migrations
