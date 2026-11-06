@@ -167,8 +167,8 @@ MODALS = {
         "blocks": [
             _text("description", "Bug description", "Payment fails on checkout for Indian cards",
                   multiline=True),
-            _select("severity", "Severity", ["P0 — production down", "P1 — major feature broken",
-                                             "P2 — degraded, workaround exists", "P3 — minor / cosmetic"]),
+            _select("severity", "Severity", ["P0: production down", "P1: major feature broken",
+                                             "P2: degraded, workaround exists", "P3: minor / cosmetic"]),
         ],
     },
     "modal_reject_invoice": {
@@ -185,6 +185,41 @@ MODALS = {
         "blocks": [
             _text("name",   "Lead name",      "Priya Sharma"),
             _text("reason", "Lost reason",    "Budget", hint="e.g. budget, timing, competitor, no response"),
+        ],
+    },
+    "modal_won_lead": {
+        "title": "Mark Deal Won",
+        "agent": "SalesAgent",
+        "blocks": [
+            _text("name", "Lead name", "Priya Sharma"),
+        ],
+    },
+    "modal_followup": {
+        "title": "Draft Follow-Up",
+        "agent": "SalesAgent",
+        "blocks": [
+            _text("name", "Lead name", "Priya Sharma"),
+        ],
+    },
+    "modal_approve_invoice": {
+        "title": "Approve Invoice",
+        "agent": "FinanceAgent",
+        "blocks": [
+            _text("invoice_id", "Invoice ID", "42"),
+        ],
+    },
+    "modal_close_bug": {
+        "title": "Close Bug",
+        "agent": "SupportAgent",
+        "blocks": [
+            _text("bug_id", "Bug ID", "42", hint="e.g. 42 or #42"),
+        ],
+    },
+    "modal_track_keyword": {
+        "title": "Track Keyword",
+        "agent": "GeoSEOAgent",
+        "blocks": [
+            _text("keyword", "Keyword or phrase", "best CRM for Indian startups"),
         ],
     },
 }
@@ -205,24 +240,34 @@ SLASH_ROUTE = {
     "/nexus-bug":        "modal_log_bug",
     "/nexus-service":    "modal_add_service",
     "/nexus-draft":      "modal_draft_post",
+    "/nexus-won":        "modal_won_lead",
+    "/nexus-followup":   "modal_followup",
+    "/nexus-approve":    "modal_approve_invoice",
+    "/nexus-close":      "modal_close_bug",
+    "/nexus-track":      "modal_track_keyword",
 }
 
 HELP_TEXT = (
-    "*NEXUS slash commands — type any to open a form:*\n"
-    "1. `/nexus-customer` — add customer\n"
-    "2. `/nexus-lead` — new sales lead\n"
-    "3. `/nexus-lost` — close lost deal\n"
-    "4. `/nexus-commitment` — set commitment\n"
-    "5. `/nexus-nps` — log NPS score\n"
-    "6. `/nexus-health` — customer health\n"
-    "7. `/nexus-expansion` — expansion opportunities\n"
-    "8. `/nexus-qbr` — QBR agenda\n"
-    "9. `/nexus-invoice` — new invoice\n"
-    "10. `/nexus-expense` — expense claim\n"
-    "11. `/nexus-reject` — reject invoice\n"
-    "12. `/nexus-bug` — log bug\n"
-    "13. `/nexus-service` — monitor service\n"
-    "14. `/nexus-draft` — draft blog post"
+    "*NEXUS slash commands (type any to open a form):*\n"
+    "1. `/nexus-customer` add customer\n"
+    "2. `/nexus-lead` new sales lead\n"
+    "3. `/nexus-lost` close lost deal\n"
+    "4. `/nexus-commitment` set commitment\n"
+    "5. `/nexus-nps` log NPS score\n"
+    "6. `/nexus-health` customer health\n"
+    "7. `/nexus-expansion` expansion opportunities\n"
+    "8. `/nexus-qbr` QBR agenda\n"
+    "9. `/nexus-invoice` new invoice\n"
+    "10. `/nexus-expense` expense claim\n"
+    "11. `/nexus-reject` reject invoice\n"
+    "12. `/nexus-bug` log bug\n"
+    "13. `/nexus-service` monitor service\n"
+    "14. `/nexus-draft` draft blog post\n"
+    "15. `/nexus-won` mark deal won\n"
+    "16. `/nexus-followup` draft follow-up message\n"
+    "17. `/nexus-approve` approve invoice\n"
+    "18. `/nexus-close` close bug\n"
+    "19. `/nexus-track` track SEO keyword"
 )
 
 
@@ -243,6 +288,11 @@ _TEXT_ROUTE = {
     "add service":  "modal_add_service",       "monitor":        "modal_add_service",
     "draft":        "modal_draft_post",        "draft post":     "modal_draft_post",
     "commitment":   "modal_set_commitment",    "set commitment": "modal_set_commitment",
+    "won":          "modal_won_lead",           "mark won":       "modal_won_lead",
+    "followup":     "modal_followup",           "follow up":      "modal_followup",
+    "approve":      "modal_approve_invoice",    "approve invoice": "modal_approve_invoice",
+    "close":        "modal_close_bug",          "close bug":      "modal_close_bug",
+    "track":        "modal_track_keyword",      "track keyword":  "modal_track_keyword",
 }
 
 
@@ -416,7 +466,7 @@ def handle_submission(callback_id: str, state_values: dict,
         elif callback_id == "modal_log_bug":
             from agents.support_agent.handlers import cmd_log_bug_data
             sev_raw = v("severity")
-            sev = sev_raw.split(" ")[0] if sev_raw else "P2"  # "P0 — production down" → "P0"
+            sev = sev_raw.split(":")[0].split(" ")[0] if sev_raw else "P2"  # "P0: production down" → "P0"
             cmd_log_bug_data(client,
                 {"description": v("description"), "severity": sev},
                 user_id, tenant_id)
@@ -432,6 +482,26 @@ def handle_submission(callback_id: str, state_values: dict,
             cmd_lost_data(client,
                 {"name": v("name"), "reason": v("reason")},
                 user_id, tenant_id)
+
+        elif callback_id == "modal_won_lead":
+            from agents.sales_agent.commands import cmd_won_data
+            cmd_won_data(client, {"name": v("name")}, user_id, tenant_id)
+
+        elif callback_id == "modal_followup":
+            from agents.sales_agent.commands import cmd_follow_up_data
+            cmd_follow_up_data(client, {"name": v("name")}, user_id, tenant_id)
+
+        elif callback_id == "modal_approve_invoice":
+            from agents.finance_agent.handlers import cmd_approve_invoice_data
+            cmd_approve_invoice_data(client, {"invoice_id": v("invoice_id")}, user_id, tenant_id)
+
+        elif callback_id == "modal_close_bug":
+            from agents.support_agent.handlers import cmd_close_bug_data
+            cmd_close_bug_data(client, {"bug_id": v("bug_id")}, user_id, tenant_id)
+
+        elif callback_id == "modal_track_keyword":
+            from agents.geo_seo_agent.handlers import cmd_track_keyword_data
+            cmd_track_keyword_data(client, {"keyword": v("keyword")}, user_id, tenant_id)
 
         else:
             logger.warning(f"handle_submission: unknown callback_id={callback_id}")

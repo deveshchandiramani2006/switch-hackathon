@@ -42,8 +42,103 @@ def _get_or_create_app(bot_token: str):
         return _shared_app
 
 
+def _dispatch_slash(channel_id: str, body: dict, internal_text: str, bolt_client):
+    """Route a slash command payload to the agent registered for that channel."""
+    entry = _channel_registry.get(channel_id)
+    if not entry:
+        try:
+            bolt_client.chat_postEphemeral(
+                channel=channel_id,
+                user=body.get("user_id", ""),
+                text="No agent configured for this channel.",
+            )
+        except Exception:
+            pass
+        return
+    client, cb = entry
+    sender = client._get_user_name(body.get("user_id", ""))
+    cb(client, {
+        "text":       internal_text,
+        "sender":     sender,
+        "room_id":    channel_id,
+        "is_mention": True,
+        "addressed":  True,
+    })
+
+
+def _register_slash_commands(app):
+    """Register all short slash commands — one per agent action."""
+    finance_ch = lambda: os.getenv("SLACK_CHANNEL_ID_FINANCE", "")
+    content_ch = lambda: os.getenv("SLACK_CHANNEL_ID_CONTENT", "")
+
+    _CMD_MAP = {
+        # ── Sales ─────────────────────────────────────────────────────────────
+        "/pipeline":     lambda t, ch: "pipeline" + (f": {t}" if t else ""),
+        "/new-lead":     lambda t, ch: f"new lead: {t}" if t else "new lead",
+        "/follow-up":    lambda t, ch: f"follow up: {t}",
+        "/won":          lambda t, ch: f"won: {t}",
+        "/lost":         lambda t, ch: f"lost: {t}",
+        "/stale":        lambda t, ch: "stale",
+        "/commitment":   lambda t, ch: f"set commitment: {t}",
+        # ── Finance ───────────────────────────────────────────────────────────
+        "/invoices":     lambda t, ch: "invoices",
+        "/invoice":      lambda t, ch: f"invoice: {t}",
+        "/budget":       lambda t, ch: f"budget: {t}",
+        "/overdue":      lambda t, ch: "overdue",
+        "/weekly":       lambda t, ch: "weekly report",
+        # ── CS ────────────────────────────────────────────────────────────────
+        "/health":       lambda t, ch: f"health: {t}" if t else "health",
+        "/at-risk":      lambda t, ch: "at-risk",
+        "/renewals":     lambda t, ch: f"renewals: {t}" if t else "renewals",
+        "/expansion":    lambda t, ch: f"expansion: {t}" if t else "expansion",
+        "/qbr":          lambda t, ch: f"qbr: {t}" if t else "qbr",
+        "/customer":     lambda t, ch: f"add customer: {t}" if t else "add customer",
+        "/nps":          lambda t, ch: f"nps: {t}" if t else "nps",
+        "/expense":      lambda t, ch: f"expense: {t}" if t else "expense",
+        # ── Support ───────────────────────────────────────────────────────────
+        "/bug":          lambda t, ch: f"bug: {t}",
+        "/bugs":         lambda t, ch: "status",
+        "/resolve":      lambda t, ch: f"close: {t}",
+        # ── Infra ─────────────────────────────────────────────────────────────
+        "/services":     lambda t, ch: "status",
+        "/ping":         lambda t, ch: f"ping: {t}",
+        "/service":      lambda t, ch: f"add: {t}",
+        # ── Blog ──────────────────────────────────────────────────────────────
+        "/draft":        lambda t, ch: f"draft: {t}" if t else "draft",
+        "/queue":        lambda t, ch: "queue",
+        "/preview":      lambda t, ch: f"preview: #{t.lstrip('#')}",
+        # ── GeoSEO ────────────────────────────────────────────────────────────
+        "/geo":          lambda t, ch: f"geo tips: {t}",
+        "/track":        lambda t, ch: f"track: {t}",
+        "/geo-run":      lambda t, ch: "geo run",
+        "/trending":     lambda t, ch: "trending",
+        # ── Ambiguous: approve/reject routed by channel ───────────────────────
+        "/approve":      lambda t, ch: (
+            f"approve: invoice-{t.lstrip('#')}" if ch == finance_ch()
+            else f"approve #{t.lstrip('#')}"
+        ),
+        "/reject":       lambda t, ch: (
+            f"reject: invoice-{t.lstrip('#')}" if ch == finance_ch()
+            else f"reject #{t.lstrip('#')}"
+        ),
+    }
+
+    def _make_handler(text_fn):
+        def _handler(ack, body, client):
+            ack()
+            channel_id = body.get("channel_id", "")
+            cmd_text   = body.get("text", "").strip()
+            _dispatch_slash(channel_id, body, text_fn(cmd_text, channel_id), client)
+        return _handler
+
+    for cmd, fn in _CMD_MAP.items():
+        app.command(cmd)(_make_handler(fn))
+
+
 def _register_global_handlers(app):
     """Register event handlers on the shared app exactly once."""
+
+    _register_slash_commands(app)
 
     @app.event("app_mention")
     def on_mention(event, say):
@@ -59,7 +154,7 @@ def _register_global_handlers(app):
             return
         cb(client, payload)
 
-    @app.action("nexus_cmd")
+    @app.action(re.compile(r"^nexus_"))
     def on_button_click(ack, body, action):
         ack()
         channel = body.get("channel", {}).get("id", "")
@@ -67,9 +162,10 @@ def _register_global_handlers(app):
         if not entry:
             return
         client, cb = entry
-        user_id = body.get("user", {}).get("id", "")
-        sender  = client._get_user_name(user_id) if user_id else "unknown"
-        cmd     = action.get("value", "").strip()
+        user_id    = body.get("user", {}).get("id", "")
+        sender     = client._get_user_name(user_id) if user_id else "unknown"
+        cmd        = action.get("value", "").strip()
+        message_ts = (body.get("container") or {}).get("message_ts", "")
         if cmd:
             payload = {
                 "text":       cmd,
@@ -77,6 +173,7 @@ def _register_global_handlers(app):
                 "room_id":    channel,
                 "is_mention": True,
                 "addressed":  True,
+                "message_ts": message_ts,
             }
             cb(client, payload)
 
@@ -199,6 +296,15 @@ class SlackClient:
             logger.error(f"post_blocks failed: {e}")
             if fallback_text:
                 self.post_message(fallback_text, room_id=room_id)
+
+    def update_message(self, ts: str, blocks: list, fallback_text: str = "", room_id: str = None):
+        if not ts:
+            return
+        channel = room_id or self.channel_id
+        try:
+            self._app.client.chat_update(channel=channel, ts=ts, text=fallback_text, blocks=blocks)
+        except Exception as e:
+            logger.error(f"update_message failed: {e}")
 
     def send_targeted_message(self, target_agent_id: str, message: str):
         self.post_message(message, room_id=target_agent_id)

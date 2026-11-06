@@ -17,10 +17,11 @@ class UserIdentityService:
     @classmethod
     def get_or_create(cls, tenant_id: str, username: str) -> dict:
         """Get user record, creating a 'member' if first seen."""
+        username = username.lower()
         try:
             with db_cursor() as cur:
                 cur.execute(
-                    "SELECT username, role FROM tenant_users WHERE tenant_id=%s AND username=%s",
+                    "SELECT username, role FROM tenant_users WHERE tenant_id=%s AND LOWER(username)=%s",
                     (tenant_id, username)
                 )
                 user = cur.fetchone()
@@ -34,7 +35,7 @@ class UserIdentityService:
                     user = cur.fetchone()
                 else:
                     cur.execute(
-                        "UPDATE tenant_users SET last_seen=NOW() WHERE tenant_id=%s AND username=%s",
+                        "UPDATE tenant_users SET last_seen=NOW() WHERE tenant_id=%s AND LOWER(username)=%s",
                         (tenant_id, username)
                     )
             return dict(user) if user else {"username": username, "role": "member"}

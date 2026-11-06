@@ -162,6 +162,13 @@ def track_keyword(client, keyword: str, tenant_id: str):
 
 # ── GEO handlers ──────────────────────────────────────────────────────────────
 
+def cmd_track_keyword_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ModalService after modal submission."""
+    keyword = data.get("keyword", "").strip()
+    if keyword:
+        track_keyword(client, keyword, tenant_id)
+
+
 def show_geo_report(client, tenant_id: str):
     with db_cursor() as cur:
         cur.execute(
