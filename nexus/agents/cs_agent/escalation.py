@@ -1,5 +1,5 @@
 """
-CS Agent escalation — RED health customers notified to CSM, then CS Lead after 48h.
+CS Agent escalation: RED health customers notified to CSM, then CS Lead after 48h.
 """
 import logging
 from datetime import datetime, timedelta
@@ -35,9 +35,9 @@ def run_health_escalations(client, tenant_id: str = "default"):
         csm = cust["assigned_csm"] or "@cs_team"
 
         if last_alert is None:
-            # First alert — notify CSM
+            # First alert: notify CSM
             msg = (
-                f"*Health Alert* — {cust['name']} is at risk\n"
+                f"*Health Alert* {cust['name']} is at risk\n"
                 f"Health score: {cust['health_score']} (RED)\n"
                 f"{csm} please take action."
             )
@@ -53,10 +53,10 @@ def run_health_escalations(client, tenant_id: str = "default"):
             logger.info(f"Health alert sent for {cust['name']} -> {csm}")
 
         elif (now - last_alert).total_seconds() > 48 * 3600:
-            # 48h no action — escalate to CS Lead
+            # 48h no action: escalate to CS Lead
             cs_lead = "@cs_lead"
             msg = (
-                f"*ESCALATION* — {cust['name']} still at risk after 48h\n"
+                f"*ESCALATION* {cust['name']} still at risk after 48h\n"
                 f"Health score: {cust['health_score']} (RED)\n"
                 f"Original CSM {csm} has not resolved. Escalating to {cs_lead}."
             )

@@ -1,5 +1,5 @@
 """
-SupportAgent scheduler — digest, proactive checks, SLA breach alerts.
+SupportAgent scheduler: digest, proactive checks, SLA breach alerts.
 """
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -44,7 +44,7 @@ def _check_sla_breaches(client):
             ).total_seconds() / 3600
             sla_limit = p0_hours if bug["severity"] == "P0" else p1_hours
             client.post_message(
-                f"*SLA BREACH* — Bug #{bug['id']} [{bug['severity']}]\n"
+                f"*SLA BREACH* Bug #{bug['id']} [{bug['severity']}]\n"
                 f"{bug['description'][:100]}\n"
                 f"Open for {hours_open:.1f}h (SLA: {sla_limit}h) | Reporter: {bug['reported_by']}"
             )

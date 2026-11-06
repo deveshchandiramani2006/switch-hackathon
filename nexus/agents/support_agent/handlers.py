@@ -201,15 +201,33 @@ def show_status(client, tenant_id: str):
         return
 
     sev_emoji = {"P0": "🚨", "P1": "🔴", "P2": "🟡", "P3": "🔵"}
-    lines = [f"*Open bugs ({len(rows)})*\n"]
+    from app.Services.BlockBuilder import _header, _section, _actions, _btn, _divider
+    blocks = [_header(f"🐛 Open Bugs ({len(rows)})")]
+    blocks.append(_divider())
     for r in rows:
         emoji = sev_emoji.get(r["severity"], "⚫")
-        lines.append(f"{emoji} `#{r['id']}` *{r['severity']}* {r['description'][:60]}")
-    client.post_message("\n".join(lines))
+        blocks.append(_section(f"{emoji} *#{r['id']} {r['severity']}*  {r['description'][:80]}"))
+        blocks.append(_actions(_btn("✅ Close", f"close: #{r['id']}", f"nexus_close_{r['id']}", style="primary")))
+    client.post_blocks(blocks, fallback_text=f"{len(rows)} open bugs")
 
 
 def close_bug(client, ref: str, sender: str, tenant_id: str):
     bug_id = ref.lstrip("#").strip()
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE bugs SET status='closed', resolved_at=NOW() WHERE id=%s AND tenant_id=%s RETURNING id",
+            (bug_id, tenant_id)
+        )
+        row = cur.fetchone()
+    if row:
+        client.post_message(f"✅ Bug #{bug_id} closed")
+    else:
+        client.post_message(f"Bug #{bug_id} not found.")
+
+
+def cmd_close_bug_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ModalService after modal submission."""
+    bug_id = str(data.get("bug_id", "")).lstrip("#").strip()
     with db_cursor() as cur:
         cur.execute(
             "UPDATE bugs SET status='closed', resolved_at=NOW() WHERE id=%s AND tenant_id=%s RETURNING id",

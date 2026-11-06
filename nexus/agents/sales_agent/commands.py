@@ -73,7 +73,7 @@ def cmd_pipeline(client, text: str, sender: str, tenant_id: str):
         if geo_filter:
             cur.execute(
                 """
-                SELECT name, stage, deal_value, city, last_touched_at, rep_slack_user
+                SELECT id, name, stage, deal_value, city, last_touched_at, rep_slack_user
                 FROM leads WHERE tenant_id = %s AND stage NOT IN ('Closed-Won','Closed-Lost')
                 AND LOWER(city) = LOWER(%s)
                 ORDER BY deal_value DESC
@@ -83,7 +83,7 @@ def cmd_pipeline(client, text: str, sender: str, tenant_id: str):
         else:
             cur.execute(
                 """
-                SELECT name, stage, deal_value, city, last_touched_at, rep_slack_user
+                SELECT id, name, stage, deal_value, city, last_touched_at, rep_slack_user
                 FROM leads WHERE tenant_id = %s ORDER BY deal_value DESC LIMIT 20
                 """,
                 (tenant_id,)
@@ -94,14 +94,18 @@ def cmd_pipeline(client, text: str, sender: str, tenant_id: str):
         client.post_message("No leads in pipeline.")
         return
 
-    from app.Services.BlockBuilder import pipeline_row, _section
-    header = "*Pipeline*" + (f": {geo_filter}" if geo_filter else "")
-    blocks = [_section(header)]
+    stage_emoji = {"Prospect": "🔵", "Qualified": "🟡", "Proposal": "🟠", "Negotiation": "🔸", "Closed-Won": "🏆", "Closed-Lost": "❌"}
+    lines = []
     for r in rows:
+        emoji = stage_emoji.get(r["stage"], "⚫")
         days = (datetime.now() - r["last_touched_at"]).days if r["last_touched_at"] else "?"
-        label = f"{format_value(r['deal_value'])} | {r['city']} | touched {days}d ago"
-        blocks += pipeline_row(r["name"], r["stage"], label)
-    client.post_blocks(blocks, fallback_text="Pipeline")
+        lines.append(f"{emoji} *{r['name']}*  {r.get('role') or r.get('city', '')} · {format_value(r['deal_value'])} · {days}d ago")
+
+    from app.Services.BlockBuilder import _header, _section, _context, _divider
+    blocks = [_header(f"📋 Pipeline ({len(rows)} lead{'s' if len(rows) != 1 else ''})")]
+    blocks.append(_divider())
+    blocks += [_section("\n".join(lines)), _context("_follow up: Name  ·  won: Name  ·  lost: Name_")]
+    client.post_blocks(blocks, fallback_text=f"Pipeline ({len(rows)} leads)")
 
 
 def cmd_follow_up(client, text: str, sender: str, tenant_id: str):
@@ -124,9 +128,11 @@ def cmd_follow_up(client, text: str, sender: str, tenant_id: str):
         f"They are in {lead['stage']} stage. Deal value: {format_value(lead['deal_value'])}. "
         f"Keep it under 4 sentences. Friendly but professional tone."
     )
-    client.post_message(
-        f"💬 *Follow-up for {lead['name']}*\n\n{draft}"
-    )
+    from app.Services.BlockBuilder import _header, _quote_llm
+    client.post_blocks([
+        _header(f"💬 Follow-up for {lead['name']}"),
+        _quote_llm(draft),
+    ], fallback_text=f"Follow-up for {lead['name']}")
 
 
 def cmd_format(client, text: str, sender: str, tenant_id: str):
@@ -179,8 +185,11 @@ def cmd_won(client, text: str, sender: str, tenant_id: str):
         )
         row = cur.fetchone()
     if row:
-        client.post_message(f"🏆 Deal won: *{row['name']}* · {format_value(row['deal_value'])}")
-        # Cross-agent signals: notify CSAgent and FinanceAgent
+        from app.Services.BlockBuilder import deal_won
+        client.post_blocks(
+            deal_won(row["name"], format_value(row["deal_value"])),
+            fallback_text=f"Deal won: {row['name']} · {format_value(row['deal_value'])}"
+        )
         won_name   = row["name"].replace(" ", "_")
         won_amount = row["deal_value"]
         client.safe_signal(
@@ -205,7 +214,8 @@ def cmd_lost(client, text: str, sender: str, tenant_id: str):
             "WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s)",
             (f"Lost: {reason}", tenant_id, f"%{name}%")
         )
-    client.post_message(f"❌ Deal lost: *{name}* · {reason}")
+    from app.Services.BlockBuilder import deal_lost
+    client.post_blocks(deal_lost(name, reason), fallback_text=f"Deal lost: {name}")
 
 
 def cmd_lost_data(client, data: dict, sender: str, tenant_id: str):
@@ -218,7 +228,8 @@ def cmd_lost_data(client, data: dict, sender: str, tenant_id: str):
             "WHERE tenant_id=%s AND LOWER(name) LIKE LOWER(%s)",
             (f"Lost: {reason}", tenant_id, f"%{name}%")
         )
-    client.post_message(f"❌ Deal lost: *{name}* · {reason}")
+    from app.Services.BlockBuilder import deal_lost
+    client.post_blocks(deal_lost(name, reason), fallback_text=f"Deal lost: {name}")
 
 
 def cmd_set_commitment(client, text: str, sender: str, tenant_id: str):
@@ -232,7 +243,8 @@ def cmd_set_commitment(client, text: str, sender: str, tenant_id: str):
             (tenant_id, None, raw, text)
         )
         cid = cur.fetchone()["id"]
-    client.post_message(f"📌 Commitment tracked (#{cid}) · {raw}")
+    from app.Services.BlockBuilder import commitment_tracked
+    client.post_blocks(commitment_tracked(cid, raw), fallback_text=f"Commitment #{cid} tracked")
 
 
 def cmd_set_commitment_data(client, data: dict, sender: str, tenant_id: str):
@@ -250,7 +262,57 @@ def cmd_set_commitment_data(client, data: dict, sender: str, tenant_id: str):
             (tenant_id, data["person"], text_summary, deadline, text_summary)
         )
         cid = cur.fetchone()["id"]
-    client.post_message(f"📌 Commitment tracked (#{cid}) · {text_summary}")
+    from app.Services.BlockBuilder import commitment_tracked
+    client.post_blocks(commitment_tracked(cid, text_summary), fallback_text=f"Commitment #{cid} tracked")
+
+
+def cmd_won_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ModalService after modal submission."""
+    name = data.get("name", "").strip()
+    with db_cursor() as cur:
+        cur.execute(
+            "UPDATE leads SET stage = 'Closed-Won', updated_at = NOW() "
+            "WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s) RETURNING name, deal_value",
+            (tenant_id, f"%{name}%")
+        )
+        row = cur.fetchone()
+    if row:
+        from app.Services.BlockBuilder import deal_won
+        client.post_blocks(
+            deal_won(row["name"], format_value(row["deal_value"])),
+            fallback_text=f"Deal won: {row['name']} {format_value(row['deal_value'])}"
+        )
+        won_name   = row["name"].replace(" ", "_")
+        won_amount = row["deal_value"]
+        client.safe_signal("CSAgent", f"DEAL_WON: customer={won_name} arr={won_amount} renewal_date=")
+        client.safe_signal("FinanceAgent", f"DEAL_WON: customer={won_name} amount={won_amount}")
+    else:
+        client.post_message(f"Lead '{name}' not found.")
+
+
+def cmd_follow_up_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ModalService after modal submission."""
+    name = data.get("name", "").strip()
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT * FROM leads WHERE tenant_id = %s AND LOWER(name) LIKE LOWER(%s) LIMIT 1",
+            (tenant_id, f"%{name}%")
+        )
+        lead = cur.fetchone()
+    if not lead:
+        client.post_message(f"Lead '{name}' not found.")
+        return
+    draft = llm.complete(
+        f"Write a short, professional follow-up message for {lead['name']} "
+        f"({lead['role']} at {lead.get('company') or lead['city']}, {lead['industry']} industry). "
+        f"They are in {lead['stage']} stage. Deal value: {format_value(lead['deal_value'])}. "
+        f"Keep it under 4 sentences. Friendly but professional tone."
+    )
+    from app.Services.BlockBuilder import _header, _quote_llm
+    client.post_blocks([
+        _header(f"💬 Follow-up for {lead['name']}"),
+        _quote_llm(draft),
+    ], fallback_text=f"Follow-up for {lead['name']}")
 
 
 def cmd_stale_leads(client, sender: str, tenant_id: str):
@@ -268,11 +330,18 @@ def cmd_stale_leads(client, sender: str, tenant_id: str):
     if not rows:
         client.post_message("✅ No stale leads.")
         return
-    lines = [f"*Stale leads ({len(rows)} · untouched 7+ days)*\n"]
+    stage_emoji = {"Prospect": "🔵", "Qualified": "🟡", "Proposal": "🟠", "Negotiation": "🔸"}
+    lines = []
     for r in rows:
+        emoji = stage_emoji.get(r["stage"], "⚫")
         days = (datetime.now() - r["last_touched_at"]).days
-        lines.append(f"🕰️ *{r['name']}* · {r['stage']} · {format_value(r['deal_value'])} · {days}d ago")
-    client.post_message("\n".join(lines))
+        lines.append(f"{emoji} *{r['name']}*  {format_value(r['deal_value'])} · {r['stage']} · {days}d ago")
+
+    from app.Services.BlockBuilder import _header, _section, _context, _divider
+    blocks = [_header(f"🕰️ Stale Leads ({len(rows)} untouched 7+ days)")]
+    blocks.append(_divider())
+    blocks += [_section("\n".join(lines)), _context("_follow up: Name  ·  won: Name  ·  lost: Name_")]
+    client.post_blocks(blocks, fallback_text=f"Stale leads ({len(rows)})")
 
 
 def cmd_lead_card(client, text: str, sender: str, tenant_id: str):

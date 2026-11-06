@@ -71,7 +71,7 @@ def _route_command(client, text: str, sender: str, tenant_id: str, room_id: str)
         ConversationService.start(tenant_id, room_id, sender, "FinanceAgent", "add_expense", client)
     elif t.startswith("expense:"):
         _cmd_expense(client, text, sender, tenant_id)
-    elif t.startswith("expenses pending"):
+    elif t.startswith("expenses"):
         _cmd_expenses_pending(client, tenant_id)
     elif t.startswith("overdue"):
         _cmd_overdue(client, tenant_id)
@@ -160,11 +160,21 @@ def _cmd_list_invoices(client, tenant_id: str):
         )
         rows = cur.fetchall()
 
-    from app.Services.BlockBuilder import invoice_list
-    client.post_blocks(
-        invoice_list([dict(r) for r in rows]),
-        fallback_text="Invoices list"
-    )
+    from app.Services.BlockBuilder import _header, _section, _actions, _btn, _fmt_money, _divider
+    blocks = [_header(f"🧾 Invoices ({len(rows)} item{'s' if len(rows) != 1 else ''})")]
+    blocks.append(_divider())
+    for r in rows:
+        status = r.get("status", "pending")
+        status_emoji = "✅" if status == "approved" else ("❌" if status == "rejected" else "⏳")
+        amount = _fmt_money(r.get("amount", 0))
+        due = str(r.get("due_date", "no date"))
+        blocks.append(_section(f"{status_emoji} *#{r['id']:03d}*  {r['vendor']}  {amount}  _due {due}_"))
+        if status == "pending":
+            blocks.append(_actions(
+                _btn("✅ Approve", f"approve: invoice-{r['id']:03d}", f"nexus_approve_{r['id']}", style="primary"),
+                _btn("❌ Reject",  f"reject: invoice-{r['id']:03d}",  f"nexus_reject_{r['id']}",  style="danger"),
+            ))
+    client.post_blocks(blocks, fallback_text=f"Invoices ({len(rows)})")
 
 
 def _cmd_approve_invoice(client, text: str, sender: str, tenant_id: str):
@@ -186,9 +196,12 @@ def _cmd_approve_invoice(client, text: str, sender: str, tenant_id: str):
         row = cur.fetchone()
 
     if row:
-        client.post_message(
-            f"✅ Invoice #{row['id']:03d} approved · *{row['vendor']}* {_fmt_v(row['amount'])}"
-        )
+        from app.Services.BlockBuilder import _header, _fields, _context
+        client.post_blocks([
+            _header("✅ Invoice Approved"),
+            _fields(f"*Vendor*\n{row['vendor']}", f"*Amount*\n{_fmt_v(row['amount'])}"),
+            _context(f"Invoice #{row['id']:03d}  ·  approved by @{sender}"),
+        ], fallback_text=f"Invoice #{row['id']:03d} approved")
     else:
         client.post_message(f"Invoice '{ref}' not found.")
 
@@ -212,7 +225,12 @@ def _cmd_reject_invoice(client, text: str, sender: str, tenant_id: str):
         row = cur.fetchone()
 
     if row:
-        client.post_message(f"Invoice-{row['id']:03d} (*{row['vendor']}*) rejected, reason: {reason}")
+        from app.Services.BlockBuilder import _header, _fields, _context
+        client.post_blocks([
+            _header("❌ Invoice Rejected"),
+            _fields(f"*Vendor*\n{row['vendor']}", f"*Reason*\n{reason}"),
+            _context(f"Invoice #{row['id']:03d}  ·  rejected by @{sender}"),
+        ], fallback_text=f"Invoice #{row['id']:03d} rejected")
     else:
         client.post_message(f"Invoice '{ref}' not found.")
 
@@ -437,8 +455,10 @@ def _handle_deal_won(client, text: str):
         )
         inv_id = cur.fetchone()["id"]
 
-    client.post_message(
-        f"💰 *{customer}* · {_fmt_v(amount)} revenue logged (invoice #{inv_id:03d})"
+    from app.Services.BlockBuilder import revenue_logged
+    client.post_blocks(
+        revenue_logged(customer, _fmt_v(amount), f"{inv_id:03d}"),
+        fallback_text=f"Revenue logged: {customer} {_fmt_v(amount)}"
     )
     logger.info(f"FinanceAgent logged revenue from DEAL_WON: {customer} {amount}")
 
@@ -488,6 +508,30 @@ def cmd_expense_data(client, data: dict, sender: str, tenant_id: str):
     )
 
 
+def cmd_approve_invoice_data(client, data: dict, sender: str, tenant_id: str):
+    """Called by ModalService after modal submission."""
+    inv_id = str(data.get("invoice_id", "")).replace("invoice-", "").strip()
+    with db_cursor() as cur:
+        cur.execute(
+            """
+            UPDATE invoices SET status='approved', approved_by=%s, approved_at=NOW()
+            WHERE id=%s AND tenant_id=%s
+            RETURNING id, vendor, amount
+            """,
+            (f"@{sender}", inv_id, tenant_id)
+        )
+        row = cur.fetchone()
+    if row:
+        from app.Services.BlockBuilder import _header, _fields, _context
+        client.post_blocks([
+            _header("✅ Invoice Approved"),
+            _fields(f"*Vendor*\n{row['vendor']}", f"*Amount*\n{_fmt_v(row['amount'])}"),
+            _context(f"Invoice #{row['id']:03d}  ·  approved by @{sender}"),
+        ], fallback_text=f"Invoice #{row['id']:03d} approved")
+    else:
+        client.post_message(f"Invoice '{inv_id}' not found.")
+
+
 def cmd_reject_invoice_data(client, data: dict, sender: str, tenant_id: str):
     inv_id = str(data["invoice_id"]).replace("invoice-", "").strip()
     reason = data["reason"]
@@ -498,7 +542,12 @@ def cmd_reject_invoice_data(client, data: dict, sender: str, tenant_id: str):
         )
         row = cur.fetchone()
     if row:
-        client.post_message(f"Invoice-{row['id']:03d} (*{row['vendor']}*) rejected, reason: {reason}")
+        from app.Services.BlockBuilder import _header, _fields, _context
+        client.post_blocks([
+            _header("❌ Invoice Rejected"),
+            _fields(f"*Vendor*\n{row['vendor']}", f"*Reason*\n{reason}"),
+            _context(f"Invoice #{row['id']:03d}  ·  rejected by @{sender}"),
+        ], fallback_text=f"Invoice #{row['id']:03d} rejected")
     else:
         client.post_message(f"Invoice '{data['invoice_id']}' not found.")
 

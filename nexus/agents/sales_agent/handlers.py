@@ -86,7 +86,7 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
         from app.Services.BlockBuilder import _section
         client.post_blocks([
             _section("*SalesAgent: Pipeline & Leads*\n"
-                     "1. `new lead` — guided form\n"
+                     "1. `new lead` (guided form)\n"
                      "2. `new lead: Name, Role, City, Industry, Value`\n"
                      "3. `pipeline`\n"
                      "4. `lead: Name`\n"
@@ -130,7 +130,7 @@ def _handle_geo_signal(client, text: str, tenant_id: str):
 
     client.post_message(
         f"📈 *{keyword}* trending +{trend}% in {geo} · {volume}/mo\n"
-        f"{lead_count} leads in that area — `follow up: Name` to draft outreach"
+        f"{lead_count} leads in that area. `follow up: Name` to draft outreach"
     )
 
 

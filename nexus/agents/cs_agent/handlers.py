@@ -140,9 +140,11 @@ def _cmd_add_customer(client, text: str, sender: str, tenant_id: str):
         )
         cid = cur.fetchone()["id"]
 
-    client.post_message(
-        f"✅ *{name}* added\nARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
-    )
+    from app.Services.BlockBuilder import _header, _fields
+    client.post_blocks([
+        _header("✅ Customer Added"),
+        _fields(f"*Name*\n{name}", f"*ARR*\n{_fmt_v(arr)}", f"*Renewal*\n{renewal_date or 'not set'}"),
+    ], fallback_text=f"{name} added")
 
 
 def _cmd_health(client, name: str, tenant_id: str):
@@ -162,12 +164,12 @@ def _cmd_health(client, name: str, tenant_id: str):
     icon = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}.get(health["level"], "⚫")
     renewal_str = str(cust["renewal_date"]) if cust["renewal_date"] else "not set"
 
-    from app.Services.BlockBuilder import _section, _context
+    from app.Services.BlockBuilder import _section, _context, _quote_llm
     signals = " · ".join(health["signals"]) if health["signals"] else "No signals"
     client.post_blocks([
         _section(f"{icon} *{cust['name']}*, Health {health['score']}/100"),
         _context(f"ARR: {_fmt_v(cust['arr'])}", f"NPS: {cust['nps'] or 'N/A'}", f"Renewal: {renewal_str}"),
-        _section(f"_{signals}_"),
+        _quote_llm(signals),
     ], fallback_text=f"{cust['name']} health: {health['score']}/100")
 
 
@@ -188,13 +190,15 @@ def _cmd_at_risk(client, tenant_id: str):
         client.post_message("🟢 All customers healthy, no at-risk accounts.")
         return
 
-    lines = [f"*At-risk ({len(rows)})*\n"]
+    lines = []
     for r in rows:
         emoji = "🔴" if r["health_score"] < 50 else "🟡"
-        lines.append(
-            f"{emoji} *{r['name']}* · score {r['health_score']} · {_fmt_v(r['arr'])}"
-        )
-    client.post_message("\n".join(lines))
+        lines.append(f"{emoji} *{r['name']}*  ARR {_fmt_v(r['arr'])} · Score {r['health_score']}/100")
+    from app.Services.BlockBuilder import _header, _section, _context, _divider
+    blocks = [_header(f"⚠️ At-Risk Customers ({len(rows)})")]
+    blocks.append(_divider())
+    blocks += [_section("\n".join(lines)), _context("_health: Name  ·  expansion: Name  ·  qbr: Name_")]
+    client.post_blocks(blocks, fallback_text="At-risk customers")
 
 
 def _cmd_renewals(client, days: int, tenant_id: str):
@@ -215,14 +219,16 @@ def _cmd_renewals(client, days: int, tenant_id: str):
         client.post_message(f"No renewals in the next {days} days.")
         return
 
-    lines = [f"*Renewals in {days} days ({len(rows)})*\n"]
+    lines = []
     for r in rows:
         days_left = (r["renewal_date"] - date.today()).days
         emoji = "🟢" if r["health_score"] >= 70 else ("🟡" if r["health_score"] >= 50 else "🔴")
-        lines.append(
-            f"{emoji} *{r['name']}* · {_fmt_v(r['arr'])} · {days_left}d left"
-        )
-    client.post_message("\n".join(lines))
+        lines.append(f"{emoji} *{r['name']}*  ARR {_fmt_v(r['arr'])} · {days_left}d left · Score {r['health_score']}/100")
+    from app.Services.BlockBuilder import _header, _section, _context, _divider
+    blocks = [_header(f"🔄 Renewals in {days} days ({len(rows)})")]
+    blocks.append(_divider())
+    blocks += [_section("\n".join(lines)), _context("_health: Name  ·  qbr: Name_")]
+    client.post_blocks(blocks, fallback_text="Upcoming renewals")
 
 
 def _cmd_log_nps(client, text: str, sender: str, tenant_id: str):
@@ -312,11 +318,11 @@ def _cmd_expansion(client, name: str, tenant_id: str):
         return
     from app.Services.LlmService import md_to_slack
     suggestions = md_to_slack(llm.complete(prompt))
-    client.post_message(
-        f"*Expansion signals for {cust['name']}:*\n"
-        + ("\n".join([f"• {s}" for s in signals]) or "No strong signals yet")
-        + f"\n\n*AI recommendations:*\n{suggestions}"
-    )
+    from app.Services.BlockBuilder import _header, _quote_llm
+    client.post_blocks([
+        _header(f"📈 Expansion Opportunities: {cust['name']}"),
+        _quote_llm(suggestions),
+    ], fallback_text=f"Expansion opportunities for {cust['name']}")
 
 
 def _cmd_qbr(client, name: str, tenant_id: str):
@@ -347,7 +353,11 @@ def _cmd_qbr(client, name: str, tenant_id: str):
         return
     from app.Services.LlmService import md_to_slack
     agenda = md_to_slack(llm.complete(prompt))
-    client.post_message(f"*QBR Agenda for {cust['name']}:*\n\n{agenda}")
+    from app.Services.BlockBuilder import _header, _quote_llm
+    client.post_blocks([
+        _header(f"📋 QBR Agenda: {cust['name']}"),
+        _quote_llm(agenda),
+    ], fallback_text=f"QBR agenda for {cust['name']}")
 
 
 def _cmd_weekly_report(client, tenant_id: str):
@@ -458,8 +468,10 @@ def _handle_deal_won(client, text: str):
         row = cur.fetchone()
 
     if row:
-        client.post_message(
-            f"🏆 *{name}* onboarded\nARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
+        from app.Services.BlockBuilder import customer_onboarded
+        client.post_blocks(
+            customer_onboarded(name, _fmt_v(arr), str(renewal_date or "")),
+            fallback_text=f"{name} onboarded · ARR: {_fmt_v(arr)}"
         )
         logger.info(f"CSAgent created customer from DEAL_WON: {name}")
 
@@ -500,10 +512,17 @@ def _handle_p1_breach(client, text: str):
                 """,
                 (tenant_id, cust["id"], f"P1 breach: {issue}")
             )
-
         csm = cust["assigned_csm"] or "@cs_team"
-        client.post_message(
-            f"🚨 *P1 Breach:* {customer}\n_{issue}_\nHealth score reduced. {csm} follow up needed."
+        from app.Services.BlockBuilder import p1_breach_alert
+        client.post_blocks(
+            p1_breach_alert(customer, issue, csm),
+            fallback_text=f"P1 Breach: {customer}: {issue[:60]}"
+        )
+    else:
+        from app.Services.BlockBuilder import p1_breach_unknown
+        client.post_blocks(
+            p1_breach_unknown(issue),
+            fallback_text=f"P1 Breach reported: {issue[:60]}"
         )
 
 
@@ -523,9 +542,11 @@ def cmd_add_customer_data(client, data: dict, sender: str, tenant_id: str):
             (tenant_id, data["name"], arr, renewal_date, f"@{sender}")
         )
         cid = cur.fetchone()["id"]
-    client.post_message(
-        f"✅ *{data['name']}* added\nARR: {_fmt_v(arr)} · renewal: {renewal_date or 'not set'}"
-    )
+    from app.Services.BlockBuilder import _header, _fields
+    client.post_blocks([
+        _header("✅ Customer Added"),
+        _fields(f"*Name*\n{data['name']}", f"*ARR*\n{_fmt_v(arr)}", f"*Renewal*\n{renewal_date or 'not set'}"),
+    ], fallback_text=f"{data['name']} added")
 
 
 def cmd_health_check_data(client, data: dict, sender: str, tenant_id: str):

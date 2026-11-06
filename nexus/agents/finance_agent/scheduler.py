@@ -1,5 +1,5 @@
 """
-FinanceAgent scheduler — daily digest, 3-day invoice reminders, weekly report.
+FinanceAgent scheduler: daily digest, 3-day invoice reminders, weekly report.
 """
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -78,7 +78,7 @@ def _invoice_reminders(client):
 
         if due_soon:
             from agents.finance_agent.handlers import _fmt_v
-            lines = [f"*Invoice reminders — due in 3 days:*"]
+            lines = [f"*Invoice reminders: due in 3 days*"]
             for inv in due_soon:
                 lines.append(f"- invoice-{inv['id']:03d} | {inv['vendor']}: {_fmt_v(inv['amount'])} due {inv['due_date']}")
             client.post_message("\n".join(lines))
