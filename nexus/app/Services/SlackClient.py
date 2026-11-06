@@ -67,60 +67,67 @@ def _dispatch_slash(channel_id: str, body: dict, internal_text: str, bolt_client
 
 
 def _register_slash_commands(app):
-    """Register all short slash commands — one per agent action."""
+    """Register all 25 slash commands — modal-openers and text-dispatch."""
     finance_ch = lambda: os.getenv("SLACK_CHANNEL_ID_FINANCE", "")
-    content_ch = lambda: os.getenv("SLACK_CHANNEL_ID_CONTENT", "")
 
+    # Commands that open a Slack modal form
+    _MODAL_MAP = {
+        "/new-lead":   "modal_new_lead",
+        "/customer":   "modal_add_customer",
+        "/commitment": "modal_set_commitment",
+        "/nps":        "modal_log_nps",
+        "/invoice":    "modal_add_invoice",
+        "/expense":    "modal_add_expense",
+        "/reject":     "modal_reject_invoice",
+        "/bug":        "modal_log_bug",
+        "/service":    "modal_add_service",
+        "/draft":      "modal_draft_post",
+        "/track":      "modal_track_keyword",
+    }
+
+    # Commands that dispatch plain text to the agent
     _CMD_MAP = {
         # ── Sales ─────────────────────────────────────────────────────────────
-        "/pipeline":     lambda t, ch: "pipeline" + (f": {t}" if t else ""),
-        "/follow-up":    lambda t, ch: f"follow up: {t}",
-        "/won":          lambda t, ch: f"won: {t}",
-        "/lost":         lambda t, ch: f"lost: {t}",
-        "/stale":        lambda t, ch: "stale",
-        "/commitment":   lambda t, ch: f"set commitment: {t}",
+        "/pipeline":  lambda t, ch: "pipeline" + (f": {t}" if t else ""),
+        "/won":       lambda t, ch: f"won: {t}",
+        "/lost":      lambda t, ch: f"lost: {t}",
+        "/follow-up": lambda t, ch: f"follow up: {t}",
         # ── Finance ───────────────────────────────────────────────────────────
-        "/invoices":     lambda t, ch: "invoices",
-        "/invoice":      lambda t, ch: f"invoice: {t}",
-        "/budget":       lambda t, ch: f"budget: {t}",
-        "/overdue":      lambda t, ch: "overdue",
-        "/weekly":       lambda t, ch: "weekly report",
-        # ── CS ────────────────────────────────────────────────────────────────
-        "/health":       lambda t, ch: f"health: {t}" if t else "health",
-        "/at-risk":      lambda t, ch: "at-risk",
-        "/renewals":     lambda t, ch: f"renewals: {t}" if t else "renewals",
-        "/expansion":    lambda t, ch: f"expansion: {t}" if t else "expansion",
-        "/qbr":          lambda t, ch: f"qbr: {t}" if t else "qbr",
-        "/customer":     lambda t, ch: f"add customer: {t}" if t else "add customer",
-        "/nps":          lambda t, ch: f"nps: {t}" if t else "nps",
-        "/expense":      lambda t, ch: f"expense: {t}" if t else "expense",
-        # ── Support ───────────────────────────────────────────────────────────
-        "/bug":          lambda t, ch: f"bug: {t}",
-        "/bugs":         lambda t, ch: "status",
-        "/resolve":      lambda t, ch: f"close: {t}",
-        # ── Infra ─────────────────────────────────────────────────────────────
-        "/services":     lambda t, ch: "status",
-        "/ping":         lambda t, ch: f"ping: {t}",
-        "/service":      lambda t, ch: f"add: {t}",
-        # ── Blog ──────────────────────────────────────────────────────────────
-        "/draft":        lambda t, ch: f"draft: {t}" if t else "draft",
-        "/queue":        lambda t, ch: "queue",
-        "/preview":      lambda t, ch: f"preview: #{t.lstrip('#')}",
-        # ── GeoSEO ────────────────────────────────────────────────────────────
-        "/geo":          lambda t, ch: f"geo tips: {t}",
-        "/track":        lambda t, ch: f"track: {t}",
-        "/geo-run":      lambda t, ch: "geo run",
-        "/trending":     lambda t, ch: "trending",
-        # ── Ambiguous: approve/reject routed by channel ───────────────────────
-        "/approve":      lambda t, ch: (
+        "/approve":   lambda t, ch: (
             f"approve: invoice-{t.lstrip('#')}" if ch == finance_ch()
             else f"approve #{t.lstrip('#')}"
         ),
-        "/reject":       lambda t, ch: (
-            f"reject: invoice-{t.lstrip('#')}" if ch == finance_ch()
-            else f"reject #{t.lstrip('#')}"
-        ),
+        # ── CS ────────────────────────────────────────────────────────────────
+        "/health":    lambda t, ch: f"health: {t}" if t else "health",
+        "/expansion": lambda t, ch: f"expansion: {t}" if t else "expansion",
+        "/qbr":       lambda t, ch: f"qbr: {t}" if t else "qbr",
+        # ── Support ───────────────────────────────────────────────────────────
+        "/bugs":      lambda t, ch: "status",
+        "/resolve":   lambda t, ch: f"close: {t}",
+        # ── Infra ─────────────────────────────────────────────────────────────
+        "/ping":      lambda t, ch: f"ping: {t}",
+        # ── Blog ──────────────────────────────────────────────────────────────
+        "/queue":     lambda t, ch: "queue",
+        # ── GeoSEO ────────────────────────────────────────────────────────────
+        "/geo":       lambda t, ch: f"geo tips: {t}",
     }
+
+    def _make_modal_handler(callback_id):
+        def _handler(ack, body, client):
+            ack()
+            channel_id = body.get("channel_id", "")
+            entry = _channel_registry.get(channel_id)
+            tenant_id = entry[0].tenant_id if entry else "default"
+            from app.Services.ModalService import open_modal
+            open_modal(
+                trigger_id=body["trigger_id"],
+                channel_id=channel_id,
+                tenant_id=tenant_id,
+                user_id=body.get("user_id", ""),
+                client=client,
+                callback_id=callback_id,
+            )
+        return _handler
 
     def _make_handler(text_fn):
         def _handler(ack, body, client):
@@ -129,6 +136,9 @@ def _register_slash_commands(app):
             cmd_text   = body.get("text", "").strip()
             _dispatch_slash(channel_id, body, text_fn(cmd_text, channel_id), client)
         return _handler
+
+    for cmd, modal_id in _MODAL_MAP.items():
+        app.command(cmd)(_make_modal_handler(modal_id))
 
     for cmd, fn in _CMD_MAP.items():
         app.command(cmd)(_make_handler(fn))
@@ -193,7 +203,7 @@ def _register_global_handlers(app):
             return
         cb(client, payload)
 
-    @app.command(re.compile(r"^/nexus|^/new-lead"))
+    @app.command(re.compile(r"^/nexus"))
     def on_nexus_command(ack, command, client):
         ack()
         channel_id = command.get("channel_id", "")

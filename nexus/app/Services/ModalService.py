@@ -298,8 +298,10 @@ _TEXT_ROUTE = {
 
 
 def open_modal(trigger_id: str, channel_id: str, tenant_id: str,
-               user_id: str, client, command: str = "", text: str = ""):
-    callback_id = SLASH_ROUTE.get(command) or _TEXT_ROUTE.get(text.strip().lower())
+               user_id: str, client, command: str = "", text: str = "",
+               callback_id: str = ""):
+    if not callback_id:
+        callback_id = SLASH_ROUTE.get(command) or _TEXT_ROUTE.get(text.strip().lower())
     if not callback_id:
         client.chat_postEphemeral(channel=channel_id, user=user_id, text=HELP_TEXT)
         return
