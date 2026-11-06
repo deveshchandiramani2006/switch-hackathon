@@ -129,14 +129,25 @@ class SwitchClient:
             logger.warning(f"record_heartbeat failed: {e}")
 
     def safe_signal(self, target_name: str, message: str):
-        """Send targeted message only if target agent is deployed."""
+        """Send targeted message only if target agent is deployed.
+
+        Matches by Switch-registered name (lowercase-hyphenated) OR by the
+        display name used in agent code (CamelCase), e.g. "CSAgent" ↔ "cs-agent".
+        """
+        import re
+        def _norm(n: str) -> str:
+            return re.sub(r"[-_ ]", "", n.lower())
+
         agents = self.list_agents()
-        target = next((a for a in agents if a.get("name") == target_name), None)
+        target = next(
+            (a for a in agents if _norm(a.get("name", "")) == _norm(target_name)),
+            None,
+        )
         if target:
             self.send_targeted_message(target["id"], message)
-            logger.info(f"Signal sent to {target_name}")
+            logger.info(f"Signal sent to {target_name} (switch id={target['id'][:8]}…)")
         else:
-            logger.info(f"{target_name} not deployed - skipping signal")
+            logger.info(f"{target_name} not deployed — skipping signal")
 
     def read_context(self, room_id: str = None, limit: int = 10) -> list:
         """Fetch recent messages from a Switch room for LLM context."""
@@ -164,19 +175,24 @@ class SwitchClient:
         self._start_ws()
 
     def _start_ws(self):
-        ws_url = f"{SWITCH_URL.replace('http', 'ws')}/agents/{self.agent_id}/connection/ws"
+        ws_url = (
+            f"{SWITCH_URL.replace('http', 'ws')}/agents/{self.agent_id}/connection/ws"
+            f"?connection_id={self.conn_id}&scope=all&filter=addressed&spawn_capable=true"
+        )
+        if self.room_id:
+            ws_url += f"&rooms={self.room_id}"
 
         def on_message(ws, raw):
             try:
                 msg = json.loads(raw)
-                if msg.get("type") == "ping":
-                    ws.send(json.dumps({"type": "pong", "cursor": self.cursor}))
+                if msg.get("event") == "ping":
+                    ws.send(json.dumps({"type": "pong"}))
                     return
-                if "cursor" in msg:
-                    self.cursor = msg["cursor"]
-                payload = msg.get("payload", {})
-                if payload.get("addressed") and self._on_message_cb:
-                    self._on_message_cb(self, payload)
+                data = msg.get("data", {})
+                if "cursor" in data:
+                    self.cursor = data["cursor"]
+                if msg.get("event") == "message" and self._on_message_cb:
+                    self._on_message_cb(self, data)
             except Exception as e:
                 logger.error(f"on_message error: {e}")
 
@@ -198,11 +214,7 @@ class SwitchClient:
 
         self.ws = websocket.WebSocketApp(
             ws_url,
-            header={
-                "Authorization": f"Bearer {self.api_key}",
-                "X-Switch-Connection-Id": self.conn_id,
-                "X-Switch-Claim-Rooms": self.room_id
-            },
+            header={"Authorization": f"Bearer {self.api_key}"},
             on_message=on_message,
             on_error=on_error,
             on_close=on_close,

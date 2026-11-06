@@ -1,9 +1,13 @@
 """
 Single-process launcher for all 7 NEXUS agents.
 
-Runs every agent in one Python process so they share a single Slack Bolt app
-and a single Socket Mode connection - Slack always delivers events to the
-right agent channel instead of distributing them randomly across 7 sockets.
+Transport architecture:
+  Slack  → user-facing interaction (slash commands, modals, Block Kit)
+  Switch → agent-to-agent signals  (DEAL_WON, P1_BREACH, GEO_SIGNAL, etc.)
+
+Each agent gets a HybridClient. When SWITCH_AGENT_ID_*/SWITCH_API_KEY_*/SWITCH_ROOM_ID_*
+env vars are set, inter-agent signals travel over Switch WebSockets. Otherwise the
+system falls back to in-process routing so it runs without a Switch server.
 """
 import os
 import sys
@@ -28,22 +32,47 @@ if not bot_token or not app_token:
     sys.exit(1)
 
 from app.Services.SlackClient import SlackClient
+from app.Services.HybridClient import HybridClient
 
-def _client(agent_name: str, channel_env: str) -> SlackClient:
+
+def _client(agent_name: str, channel_env: str, switch_prefix: str) -> HybridClient:
     channel_id = os.getenv(channel_env, "")
     if not channel_id:
-        logger.warning(f"{agent_name}: {channel_env} not set - agent will not receive messages")
-    return SlackClient(agent_name, bot_token, app_token, channel_id, tenant_id)
+        logger.warning(f"{agent_name}: {channel_env} not set - agent will not receive Slack messages")
+    slack = SlackClient(agent_name, bot_token, app_token, channel_id, tenant_id)
+
+    # Build SwitchClient when all three credentials are present
+    agent_id  = os.getenv(f"SWITCH_AGENT_ID_{switch_prefix}", "")
+    api_key   = os.getenv(f"SWITCH_API_KEY_{switch_prefix}", "")
+    room_id   = os.getenv(f"SWITCH_ROOM_ID_{switch_prefix}", "")
+    switch = None
+    if agent_id and api_key and room_id:
+        try:
+            from app.Services.SwitchClient import SwitchClient
+            switch = SwitchClient(agent_name, api_key, agent_id, room_id, tenant_id)
+            logger.info(f"{agent_name}: Switch transport enabled (agent_id={agent_id[:8]}…)")
+        except Exception as e:
+            logger.warning(f"{agent_name}: Switch import failed ({e}) - using Slack fallback")
+    else:
+        missing = [v for v in [
+            f"SWITCH_AGENT_ID_{switch_prefix}",
+            f"SWITCH_API_KEY_{switch_prefix}",
+            f"SWITCH_ROOM_ID_{switch_prefix}",
+        ] if not os.getenv(v)]
+        if missing:
+            logger.info(f"{agent_name}: Switch not configured ({', '.join(missing)} missing) - using in-process fallback")
+
+    return HybridClient(slack, switch)
 
 
 # ── Build all clients ─────────────────────────────────────────────────────────
-sales_client   = _client("SalesAgent",   "SLACK_CHANNEL_ID_SALES")
-support_client = _client("SupportAgent", "SLACK_CHANNEL_ID_SUPPORT")
-cs_client      = _client("CSAgent",      "SLACK_CHANNEL_ID_CS")
-finance_client = _client("FinanceAgent", "SLACK_CHANNEL_ID_FINANCE")
-geo_client     = _client("GeoSEOAgent",  "SLACK_CHANNEL_ID_GROWTH")
-blog_client    = _client("BlogAgent",    "SLACK_CHANNEL_ID_CONTENT")
-infra_client   = _client("InfraAgent",   "SLACK_CHANNEL_ID_DEVOPS")
+sales_client   = _client("SalesAgent",   "SLACK_CHANNEL_ID_SALES",    "SALES")
+support_client = _client("SupportAgent", "SLACK_CHANNEL_ID_SUPPORT",  "SUPPORT")
+cs_client      = _client("CSAgent",      "SLACK_CHANNEL_ID_CS",       "CS")
+finance_client = _client("FinanceAgent", "SLACK_CHANNEL_ID_FINANCE",  "FINANCE")
+geo_client     = _client("GeoSEOAgent",  "SLACK_CHANNEL_ID_GROWTH",   "GEOSEO")
+blog_client    = _client("BlogAgent",    "SLACK_CHANNEL_ID_CONTENT",  "BLOG")
+infra_client   = _client("InfraAgent",   "SLACK_CHANNEL_ID_DEVOPS",   "INFRA")
 
 # ── Start schedulers ──────────────────────────────────────────────────────────
 logger.info("Starting schedulers...")
@@ -69,8 +98,8 @@ start_blog_scheduler(blog_client)
 from agents.infra_agent.monitor import start_monitor
 start_monitor(infra_client)
 
-# ── Connect all agents (registers channels; starts ONE shared socket) ─────────
-logger.info("Connecting all agents to Slack...")
+# ── Connect all agents ────────────────────────────────────────────────────────
+logger.info("Connecting all agents...")
 
 from agents.sales_agent.handlers   import handle_message as sales_handle
 from agents.support_agent.handlers import handle_message as support_handle
@@ -88,7 +117,13 @@ geo_client.connect(geo_handle)
 blog_client.connect(blog_handle)
 infra_client.connect(infra_handle)
 
-logger.info("All 7 agents connected - one shared Socket Mode connection active.")
+switch_active = sum(
+    1 for c in [sales_client, support_client, cs_client, finance_client,
+                geo_client, blog_client, infra_client]
+    if c._switch is not None
+)
+
+logger.info(f"All 7 agents connected — {switch_active}/7 using Switch for signals.")
 logger.info("Channels registered:")
 for name, env in [
     ("SalesAgent",   "SLACK_CHANNEL_ID_SALES"),

@@ -313,7 +313,8 @@ def handle_brief(client, text: str, tenant_id: str = "default"):
             )
             q_id = cur.fetchone()["id"]
 
-    preview = body[:200] + "…" if len(body) > 200 else body
+    from app.Services.LlmService import md_to_slack
+    preview = md_to_slack(body[:200]) + "…" if len(body) > 200 else md_to_slack(body)
     from app.Services.BlockBuilder import draft_created
     client.post_blocks(
         draft_created(q_id, title, preview),

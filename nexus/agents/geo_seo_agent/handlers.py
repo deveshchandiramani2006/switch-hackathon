@@ -95,7 +95,12 @@ def handle_post_published(client, text: str, tenant_id: str):
                 "UPDATE keyword_tracking SET published_url=%s WHERE LOWER(keyword)=LOWER(%s) AND tenant_id=%s",
                 (url, keyword, tenant_id)
             )
-        client.post_message(f"📡 Tracking *{keyword}*: {url}")
+        from app.Services.BlockBuilder import _header, _section, _context
+        client.post_blocks([
+            _header("🚀 Post Published — Tracking Started"),
+            _section(f"*{keyword.title()}*"),
+            _context(url),
+        ], fallback_text=f"Post published: {keyword}")
 
 
 def show_trending(client, tenant_id: str):
@@ -225,6 +230,10 @@ def geo_tips_single(client, keyword: str, tenant_id: str):
     )
     score_result = score_content_for_geo(keyword, placeholder)
     recs = generate_geo_recommendations(keyword, score_result)
-    client.post_message(
-        f"💡 *GEO tips for \"{keyword}\"* (score {score_result.get('score', '?')}/10)\n\n{recs}"
-    )
+    from app.Services.LlmService import md_to_slack
+    from app.Services.BlockBuilder import _header, _quote_llm, _context
+    client.post_blocks([
+        _header(f"💡 GEO Tips: \"{keyword}\""),
+        _context(f"Score {score_result.get('score', '?')}/10"),
+        _quote_llm(md_to_slack(recs)),
+    ], fallback_text=f"GEO tips for '{keyword}': {score_result.get('score', '?')}/10")

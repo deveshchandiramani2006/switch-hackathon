@@ -185,7 +185,7 @@ def cmd_format_data(client, data: dict, sender: str, tenant_id: str):
 
 
 _DEAL_WON_TARGETS = {
-    "CSAgent":      lambda name, amount: f"DEAL_WON: customer={name} arr={amount} renewal_date=",
+    "CSAgent":      lambda name, amount: f"DEAL_WON: customer={name} arr={amount}",
     "FinanceAgent": lambda name, amount: f"DEAL_WON: customer={name} amount={amount}",
 }
 

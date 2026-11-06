@@ -39,6 +39,8 @@ def handle_message(client, payload: dict):
     if not text and not payload.get("is_mention"):
         return
 
+    message_ts = payload.get("message_ts", "")
+
     if is_mention:
         clean = text.split(">", 1)[-1].strip() if text.startswith("<@") else text
         for p in ["@SupportAgent ", "@supportagent "]:
@@ -50,7 +52,7 @@ def handle_message(client, payload: dict):
         if ConversationService.resume(tenant_id, room_id, sender, "SupportAgent", clean, client):
             return
 
-        route_command(client, clean, sender, tenant_id, room_id)
+        route_command(client, clean, sender, tenant_id, room_id, message_ts)
     else:
         # Passive scan for bug language
         if any(kw in text.lower() for kw in BUG_KEYWORDS):
@@ -60,7 +62,7 @@ def handle_message(client, payload: dict):
             passive_triage(client, text, sender, tenant_id)
 
 
-def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
+def route_command(client, text: str, sender: str, tenant_id: str, room_id: str, message_ts: str = ""):
     t = text.lower().strip()
     from app.Services.UsageAnalyticsService import UsageAnalyticsService
     _cmd_key = t.split(":")[0].strip()[:50]
@@ -70,7 +72,7 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
     elif t.startswith("status"):
         show_status(client, tenant_id)
     elif t.startswith("close:"):
-        close_bug(client, t.split(":", 1)[1].strip(), sender, tenant_id)
+        close_bug(client, t.split(":", 1)[1].strip(), sender, tenant_id, message_ts)
     elif t.startswith("bugs:"):
         filter_bugs(client, t.split(":", 1)[1].strip(), tenant_id)
     elif t.startswith("patterns"):
@@ -215,16 +217,28 @@ def show_status(client, tenant_id: str):
     client.post_blocks(blocks, fallback_text=f"{len(rows)} open bugs")
 
 
-def close_bug(client, ref: str, sender: str, tenant_id: str):
+def close_bug(client, ref: str, sender: str, tenant_id: str, message_ts: str = ""):
     bug_id = ref.lstrip("#").strip()
     with db_cursor() as cur:
         cur.execute(
-            "UPDATE bugs SET status='closed', resolved_at=NOW() WHERE id=%s AND tenant_id=%s RETURNING id",
+            "UPDATE bugs SET status='closed', resolved_at=NOW() "
+            "WHERE id=%s AND tenant_id=%s RETURNING id, description, severity",
             (bug_id, tenant_id)
         )
         row = cur.fetchone()
     if row:
-        client.post_message(f"✅ Bug #{bug_id} closed")
+        sev_emoji = {"P0": "🚨", "P1": "🔴", "P2": "🟡", "P3": "🔵"}.get(row["severity"], "⚫")
+        sev_label = {"P0": "Critical", "P1": "High", "P2": "Medium", "P3": "Low"}.get(row["severity"], "")
+        from app.Services.BlockBuilder import _header, _section, _context
+        closed_blocks = [
+            _header(f"✅ Bug Closed: {row['severity']} {sev_label}"),
+            _section(row["description"]),
+            _context(f"Bug #{bug_id}  ·  closed by @{sender}"),
+        ]
+        if message_ts:
+            client.update_message(message_ts, closed_blocks, fallback_text=f"Bug #{bug_id} closed")
+        else:
+            client.post_blocks(closed_blocks, fallback_text=f"Bug #{bug_id} closed")
     else:
         client.post_message(f"Bug #{bug_id} not found.")
 

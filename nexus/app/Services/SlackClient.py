@@ -175,7 +175,6 @@ def _handle_nexus_status(channel_id: str):
         _header("🔌 NEXUS Agent Status"),
         _divider(),
         _section("\n".join(lines)),
-        _context("_Live query via Switch `list_agents()` - WebSocket presence_"),
     ], fallback_text="NEXUS Agent Status")
 
 
@@ -357,19 +356,38 @@ class SlackClient:
             logger.error(f"update_message failed: {e}")
 
     def send_targeted_message(self, target_agent_id: str, message: str):
-        self.post_message(message, room_id=target_agent_id)
+        entry = _channel_registry.get(target_agent_id)
+        if entry:
+            client, cb = entry
+            try:
+                cb(client, {
+                    "text": message, "sender": self.agent_name,
+                    "room_id": target_agent_id, "is_mention": False, "addressed": True,
+                })
+            except Exception as e:
+                logger.error(f"send_targeted_message to {client.agent_name} failed: {e}")
+        else:
+            self.post_message(message, room_id=target_agent_id)
 
     def safe_signal(self, target_name: str, message: str):
-        env_var = _AGENT_CHANNEL_ENV.get(target_name)
-        channel = os.getenv(env_var, "") if env_var else ""
-        if channel:
-            self.post_message(message, room_id=channel)
-            logger.info(f"Signal sent to {target_name} ({channel})")
-        else:
-            logger.info(f"{target_name} Slack channel not configured - skipping signal")
+        for client, cb in _channel_registry.values():
+            if client.agent_name == target_name:
+                try:
+                    cb(client, {
+                        "text": message, "sender": self.agent_name,
+                        "room_id": client.channel_id, "is_mention": False, "addressed": True,
+                    })
+                    logger.info(f"Signal sent to {target_name} (direct)")
+                except Exception as e:
+                    logger.error(f"safe_signal to {target_name} failed: {e}")
+                return
+        logger.info(f"{target_name} not registered - skipping signal")
 
     def list_agents(self) -> list:
-        return []
+        return [
+            {"name": client.agent_name, "id": client.channel_id}
+            for client, _ in _channel_registry.values()
+        ]
 
     def record_heartbeat(self):
         try:
