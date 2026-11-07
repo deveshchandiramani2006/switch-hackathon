@@ -3,6 +3,10 @@ imp/
 docs/extra/
 docs/summary/
 
+# demo seed scripts — local only, not for public repo
+database/seed_all_demo.py
+switch-server/
+
 # python / environment
 .env
 *.pyc

@@ -54,17 +54,19 @@ def check_and_escalate(client):
 
         new_level = current + 1
         target    = levels[current]["slack_user"]
-        tone      = LEVEL_TONES.get(new_level, LEVEL_TONES[3])
-        days_over = (now - c["deadline"]).days if c["deadline"] else "unknown"
+        days_over = (now - c["deadline"]).days if c["deadline"] else 0
 
-        msg = llm.complete(
-            f"{tone}\n\n"
-            f"Lead: {c['lead_name'] or 'Unknown'}\n"
-            f"Commitment: {c['commitment_text']}\n"
-            f"Deadline: {c['deadline']}\n"
-            f"Days overdue: {days_over}\n"
-            f"Target: {target}\n\n"
-            f"Write only the Slack message text."
+        level_labels = {1: "Rep", 2: "Team Lead", 3: "Manager", 4: "VP", 5: "CEO"}
+        label = level_labels.get(new_level, f"Level {new_level}")
+        urgency = ["", "🟡 Reminder", "🟠 Urgent", "🔴 Critical", "🚨 CEO Escalation"]
+        tag = urgency[min(new_level, len(urgency) - 1)]
+
+        msg = (
+            f"{tag} — *Escalation Level {new_level} / {label}*\n"
+            f"*Lead:* {c['lead_name']}\n"
+            f"*Commitment:* {c['commitment_text']}\n"
+            f"*Overdue by:* {days_over} day{'s' if days_over != 1 else ''}\n"
+            f"*Action required:* Follow up and unblock this deal immediately."
         )
 
         level_idx = current  # 0-based index into levels

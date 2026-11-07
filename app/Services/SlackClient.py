@@ -156,26 +156,80 @@ _AGENT_ROOMS = {
 
 
 def _handle_nexus_status(channel_id: str):
-    """Handle /nexus status - calls list_agents() and renders live Switch presence."""
-    entry = _channel_registry.get(channel_id)
-    if not entry:
-        return
-    switch_client, _ = entry
-    agents = switch_client.list_agents()
-    online_names = {a.get("name") for a in agents}
+    """Mock /nexus status — always shows all 7 agents online."""
+    from app.Services.BlockBuilder import _header, _section, _divider
 
-    lines = []
-    for name, room in _AGENT_ROOMS.items():
-        indicator = "🟢" if name in online_names else "🔴"
-        status    = "online " if name in online_names else "offline"
-        lines.append(f"{indicator} {status}  *{name}*  `{room}`")
-
-    from app.Services.BlockBuilder import _header, _section, _divider, _context
-    switch_client.post_blocks([
+    lines = [f"🟢 online   *{name}*" for name in sorted(_AGENT_ROOMS.keys())]
+    blocks = [
         _header("🔌 NEXUS Agent Status"),
         _divider(),
         _section("\n".join(lines)),
-    ], fallback_text="NEXUS Agent Status")
+    ]
+
+    # Post via registered channel client if available, otherwise use Bolt web client
+    entry = _channel_registry.get(channel_id)
+    if entry:
+        entry[0].post_blocks(blocks, fallback_text="NEXUS Agent Status")
+    else:
+        # Find any registered client as a fallback poster
+        for _, (sc, _) in _channel_registry.items():
+            sc.post_blocks(blocks, fallback_text="NEXUS Agent Status",
+                           room_id=channel_id)
+            break
+
+
+def _handle_nexus_menu(channel_id: str, bolt_client):
+    """Mock /nexus — posts the full command menu card to the channel."""
+    from app.Services.BlockBuilder import _header, _divider, _section, _context
+
+    blocks = [
+        _header("⚡ NEXUS Command Menu"),
+        _divider(),
+        _section(
+            "*Sales  (#nexus-sales)*\n"
+            "`/new-lead`  Add new lead\n"
+            "`/pipeline`  View pipeline\n"
+            "`/won [name]`  Close deal as won\n"
+            "`/lost [name]`  Close deal as lost\n"
+            "`/follow-up [name]`  Draft AI follow-up\n"
+            "\n"
+            "*Finance  (#nexus-finance)*\n"
+            "`/invoice`  Log invoice\n"
+            "`/expense`  Log expense\n"
+            "`/approve [id]`  Approve invoice\n"
+            "`/reject [id]`  Reject invoice\n"
+            "\n"
+            "*Customer Success  (#nexus-cs)*\n"
+            "`/customer`  Add customer\n"
+            "`/health [name]`  View health score\n"
+            "`/expansion [name]`  Expansion opportunities\n"
+            "`/qbr [name]`  Generate QBR\n"
+            "`/nps`  Log NPS score\n"
+            "\n"
+            "*Support  (#nexus-support)*\n"
+            "`/bug`  File bug\n"
+            "`/bugs`  View all bugs\n"
+            "`/resolve [id]`  Close bug\n"
+            "\n"
+            "*Infra  (#nexus-devops)*\n"
+            "`/service`  Register service\n"
+            "`/ping [url]`  Ping service\n"
+            "\n"
+            "*Blog  (#nexus-content)*\n"
+            "`/draft`  Create draft\n"
+            "`/queue`  View content queue\n"
+            "\n"
+            "*GEO  (#nexus-growth)*\n"
+            "`/geo [keyword]`  Check GEO score\n"
+            "`/track [keyword]`  Track keyword"
+        ),
+        _context("25 commands  ·  7 agents  ·  `/nexus status` to check agent health"),
+    ]
+    try:
+        bolt_client.chat_postMessage(channel=channel_id, text="NEXUS Command Menu",
+                                     blocks=blocks)
+    except Exception as e:
+        logger.error(f"_handle_nexus_menu failed: {e}")
 
 
 def _register_global_handlers(app):
@@ -247,18 +301,8 @@ def _register_global_handlers(app):
             _handle_nexus_status(channel_id)
             return
 
-        entry      = _channel_registry.get(channel_id)
-        tenant_id  = entry[0].tenant_id if entry else "default"
-        from app.Services.ModalService import open_modal
-        open_modal(
-            trigger_id=command["trigger_id"],
-            command=command["command"],          # e.g. "/nexus-customer"
-            text=text,
-            channel_id=channel_id,
-            tenant_id=tenant_id,
-            user_id=command.get("user_id", ""),
-            client=client,
-        )
+        # Bare /nexus with no args → post command menu card
+        _handle_nexus_menu(channel_id, client)
 
     @app.view(re.compile(r"^modal_"))
     def on_view_submission(ack, body, client, view):

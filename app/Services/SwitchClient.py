@@ -99,15 +99,16 @@ class SwitchClient:
     def list_agents(self) -> list:
         """List all registered agents."""
         try:
-            resp = requests.get(
+            resp = requests.post(
                 f"{SWITCH_URL}/agents/{self.agent_id}/ops/list_agents",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "X-Switch-Connection-Id": self.conn_id
                 },
+                json={},
                 timeout=10
             )
-            return resp.json().get("agents", [])
+            return resp.json().get("result", [])
         except Exception as e:
             logger.error(f"list_agents failed: {e}")
             return []

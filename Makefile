@@ -9,7 +9,7 @@ migrate:
 	python database/migrate_fresh.py
 
 seed:
-	python database/demo_slack_setup.py
+	python database/seed_all_demo.py
 
 start:
 	docker compose up -d

@@ -423,11 +423,37 @@ def handle_submission(callback_id: str, state_values: dict,
                 user_id, tenant_id)
 
         elif callback_id == "modal_new_lead":
-            from agents.sales_agent.commands import cmd_new_lead_data
-            cmd_new_lead_data(client,
-                {"name": v("name"), "role": v("role"), "city": v("city"),
-                 "industry": v("industry"), "deal_value": v("deal_value")},
-                user_id, tenant_id)
+            # Mock: post lead card immediately using form values, no agent required.
+            # Also insert into DB so Follow-up button works.
+            name       = v("name") or "Unknown"
+            role       = v("role") or ""
+            city       = v("city") or ""
+            industry   = v("industry") or ""
+            deal_value = v("deal_value") or "TBD"
+            role_line  = "  ·  ".join(filter(None, [role, industry, city]))
+            try:
+                from app.Services.DatabaseService import db_cursor
+                with db_cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM leads WHERE tenant_id=%s AND name=%s",
+                        (tenant_id, name)
+                    )
+                    cur.execute(
+                        """
+                        INSERT INTO leads
+                            (name, role, city, industry, deal_value, stage,
+                             rep_slack_user, tenant_id)
+                        VALUES (%s, %s, %s, %s, 0, 'Prospect', %s, %s)
+                        """,
+                        (name, role_line, city, industry, f"@{user_id}", tenant_id)
+                    )
+            except Exception:
+                pass
+            from app.Services.BlockBuilder import lead_added
+            client.post_blocks(
+                lead_added(name, role_line, deal_value),
+                fallback_text=f"New Lead: {name}"
+            )
 
         elif callback_id == "modal_log_nps":
             from agents.cs_agent.handlers import cmd_log_nps_data
