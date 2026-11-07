@@ -116,7 +116,48 @@ class LLMClient:
                 tenant_id: str = None, client=None) -> str:
         """Route to correct provider with retry, feature gating, and fallback."""
         if os.getenv("LLM_MOCK_MODE", "").lower() == "true":
-            return f"[MOCK] Response for: {prompt[:60]}..."
+            _MOCK = {
+                "sales": (
+                    "Hi Vikram,\n\nFollowing up on our conversation — given your focus on streamlining "
+                    "FinTech operations at scale, NEXUS could cut your team's coordination overhead significantly. "
+                    "The automated deal → onboarding chain alone saves 2–3 hours per closed deal.\n\n"
+                    "Happy to do a 20-minute walkthrough this week. Tuesday or Thursday work for you?\n\nBest,\nRavi"
+                ),
+                "support": (
+                    "Severity: *P0 — Critical*\n\n"
+                    "'All users affected' indicates a production-wide outage on the payment path. "
+                    "Immediate escalation required. Blast radius: all Indian UPI transactions. "
+                    "Recommend rollback to last stable deploy and notify CS within 15 minutes."
+                ),
+                "geo_seo": (
+                    '{"score": 3, "gaps": ["No structured data markup", "Missing FAQ schema", '
+                    '"No India-specific examples or case studies"], '
+                    '"fixes": ["Add FAQ schema to top 3 pages", "Add 3 India startup case studies", '
+                    '"Add HowTo structured data for onboarding flow"]}'
+                ),
+                "blog": (
+                    "# Best CRM for Indian Startups in 2026: A Practical Guide\n\n"
+                    "Indian B2B startups face a unique challenge: deal cycles average 45 days, reps work across "
+                    "WhatsApp, email, and Slack, and most Western CRMs weren't built for this reality.\n\n"
+                    "## What Indian Startups Actually Need\n"
+                    "GST invoice generation. WhatsApp integration. INR pricing. Multilingual support. "
+                    "Most US-first CRMs fail on at least two of these.\n\n"
+                    "## Top Picks\n"
+                    "For teams under 20 reps, the right CRM is one your team will actually use — "
+                    "which means it needs to live where they already work: Slack."
+                ),
+                "cs": (
+                    "*Health Score: 42/100 — At Risk*\n\n"
+                    "• NPS dropped from 8 → 5 in the last 30 days\n"
+                    "• Support tickets up 3× this month\n"
+                    "• Last product login: 12 days ago\n"
+                    "• Renewal in 10 days\n\n"
+                    "*Recommended action:* Schedule EBR this week. Lead with the new reporting dashboard."
+                ),
+                "infra": "Service health check complete. All monitored endpoints responding within SLA.",
+                "finance": "Invoice processed and logged. Revenue recognition complete for this quarter.",
+            }
+            return _MOCK.get(self.agent, _MOCK.get("sales", "Done."))
 
         import time
 

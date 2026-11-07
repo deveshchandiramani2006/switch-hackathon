@@ -3,7 +3,8 @@ from .commitment import detect_commitment, detect_resolution
 from .commands import (
     cmd_new_lead, cmd_pipeline, cmd_follow_up,
     cmd_format, cmd_won, cmd_lost,
-    cmd_set_commitment, cmd_stale_leads, cmd_lead_card
+    cmd_set_commitment, cmd_stale_leads, cmd_lead_card,
+    cmd_geo_outreach
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,8 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
         ConversationService.start(tenant_id, room_id, sender, "SalesAgent", "set_commitment", client)
     elif t.startswith("set commitment:") and len(t) > len("set commitment:"):
         cmd_set_commitment(client, text, sender, tenant_id)
+    elif t.startswith("geo_outreach:"):
+        cmd_geo_outreach(client, text, sender, tenant_id)
     elif t.startswith("stale"):
         cmd_stale_leads(client, sender, tenant_id)
     elif t.startswith("lead:"):
@@ -106,6 +109,9 @@ def route_command(client, text: str, sender: str, tenant_id: str, room_id: str):
 def _handle_geo_signal(client, text: str, tenant_id: str):
     """GEO_SIGNAL: keyword=X geo=Y volume=Z trend=T"""
     from app.Services.DatabaseService import db_cursor
+    from app.Services.BlockBuilder import _header, _section, _fields, _divider, _context, _actions, _btn
+    from .commands import format_value
+
     parts = {}
     for p in text.replace("GEO_SIGNAL:", "").strip().split():
         if "=" in p:
@@ -117,24 +123,62 @@ def _handle_geo_signal(client, text: str, tenant_id: str):
     volume  = parts.get("volume", "?")
     trend   = parts.get("trend", "0")
 
-    # Count leads in that geo area filtered by tenant
-    lead_count = 0
-    if geo:
-        try:
-            with db_cursor() as cur:
-                cur.execute(
-                    "SELECT COUNT(*) AS cnt FROM leads "
-                    "WHERE tenant_id = %s AND LOWER(city) LIKE LOWER(%s) "
-                    "AND stage NOT IN ('Closed-Won','Closed-Lost')",
-                    (tenant_id, f"%{geo}%")
-                )
-                lead_count = cur.fetchone()["cnt"]
-        except Exception:
-            pass
+    # City-match first; fall back to all active leads if geo is country-level
+    leads = []
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT name, role, stage, city, deal_value FROM leads "
+            "WHERE tenant_id = %s AND LOWER(city) LIKE LOWER(%s) "
+            "AND stage NOT IN ('Closed-Won','Closed-Lost') "
+            "ORDER BY deal_value DESC LIMIT 5",
+            (tenant_id, f"%{geo}%")
+        )
+        leads = cur.fetchall()
+        if not leads:
+            cur.execute(
+                "SELECT name, role, stage, city, deal_value FROM leads "
+                "WHERE tenant_id = %s AND stage NOT IN ('Closed-Won','Closed-Lost') "
+                "ORDER BY deal_value DESC LIMIT 5",
+                (tenant_id,)
+            )
+            leads = cur.fetchall()
 
-    client.post_message(
-        f"📈 *{keyword}* trending +{trend}% in {geo} · {volume}/mo\n"
-        f"{lead_count} leads in that area. `follow up: Name` to draft outreach"
+    if leads:
+        lead_lines = "\n".join(
+            f"• *{l['name']}* ({l['stage']}) — {l['city']} — {format_value(l['deal_value'])}"
+            for l in leads
+        )
+    else:
+        lead_lines = "_No active leads in pipeline._"
+
+    kw_encoded  = keyword.replace(" ", "_")
+    geo_encoded = geo.replace(" ", "_")
+
+    blocks = [
+        _header(f"📍 Geo Signal: {keyword} trending +{trend}% in {geo}"),
+        _fields(
+            f"*Keyword*\n{keyword}",
+            f"*Volume*\n{volume}/mo",
+        ),
+        _section(f"*Active leads in pipeline:*\n{lead_lines}"),
+        _divider(),
+    ]
+    if leads:
+        blocks.append(_actions(
+            _btn(
+                "✍️ Draft Outreach for All",
+                f"geo_outreach: keyword={kw_encoded} geo={geo_encoded}",
+                "nexus_geo_outreach",
+                "primary",
+            )
+        ))
+        blocks.append(_context("_Signal from GeoSEOAgent via Switch_"))
+    else:
+        blocks.append(_context("_No leads to target. Add leads with `new lead`._"))
+
+    client.post_blocks(
+        blocks,
+        fallback_text=f"Geo signal: {keyword} trending +{trend}% in {geo}"
     )
 
 

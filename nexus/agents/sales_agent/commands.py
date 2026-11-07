@@ -402,6 +402,56 @@ def cmd_lead_card(client, text: str, sender: str, tenant_id: str):
     client.post_message("\n".join(lines))
 
 
+def cmd_geo_outreach(client, text: str, sender: str, tenant_id: str):
+    """Button handler: draft geo-targeted outreach for all active leads."""
+    parts = {}
+    for p in text.split(":", 1)[-1].strip().split():
+        if "=" in p:
+            k, v = p.split("=", 1)
+            parts[k] = v
+
+    keyword = parts.get("keyword", "").replace("_", " ")
+    geo     = parts.get("geo", "").replace("_", " ")
+
+    with db_cursor() as cur:
+        cur.execute(
+            "SELECT * FROM leads WHERE tenant_id = %s AND LOWER(city) LIKE LOWER(%s) "
+            "AND stage NOT IN ('Closed-Won','Closed-Lost') ORDER BY deal_value DESC LIMIT 5",
+            (tenant_id, f"%{geo}%")
+        )
+        leads = cur.fetchall()
+        if not leads:
+            cur.execute(
+                "SELECT * FROM leads WHERE tenant_id = %s "
+                "AND stage NOT IN ('Closed-Won','Closed-Lost') ORDER BY deal_value DESC LIMIT 5",
+                (tenant_id,)
+            )
+            leads = cur.fetchall()
+
+    if not leads:
+        client.post_message("No active leads to target for geo outreach.")
+        return
+
+    client.post_message(
+        f"Drafting geo-targeted outreach for {len(leads)} lead(s) based on *{keyword}* trending in {geo}..."
+    )
+
+    from app.Services.BlockBuilder import _header, _quote_llm
+    for lead in leads:
+        draft = llm.complete(
+            f"Write a short, personalized outreach message for {lead['name']} "
+            f"({lead['role']} at {lead.get('company') or lead['city']}, {lead['industry']} industry, "
+            f"{lead['stage']} stage). "
+            f"Context: The search term '{keyword}' is trending in {geo} right now. "
+            f"Reference this trend subtly to make the message timely. "
+            f"Keep it under 4 sentences. Friendly but professional tone."
+        )
+        client.post_blocks([
+            _header(f"💬 Geo Outreach: {lead['name']}"),
+            _quote_llm(draft),
+        ], fallback_text=f"Geo outreach for {lead['name']}")
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def parse_deal_value(s: str) -> int:
