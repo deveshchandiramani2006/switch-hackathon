@@ -89,22 +89,14 @@ Each agent maintains a persistent WebSocket connection to Switch. When an event 
 
 ```mermaid
 flowchart LR
-    classDef sales   fill:#1d4ed8,stroke:#93c5fd,color:#fff,stroke-width:2px
-    classDef finance fill:#5b21b6,stroke:#c4b5fd,color:#fff,stroke-width:2px
-    classDef cs      fill:#0e7490,stroke:#67e8f9,color:#fff,stroke-width:2px
-    classDef support fill:#991b1b,stroke:#fca5a5,color:#fff,stroke-width:2px
-    classDef geo     fill:#166534,stroke:#86efac,color:#fff,stroke-width:2px
-    classDef blog    fill:#92400e,stroke:#fde68a,color:#fff,stroke-width:2px
-    classDef infra   fill:#374151,stroke:#d1d5db,color:#fff,stroke-width:2px
-
     subgraph sw["⚡ Switch — agent message bus"]
-        SA("💼 SalesAgent"):::sales
-        FA("💰 FinanceAgent"):::finance
-        CA("🤝 CSAgent"):::cs
-        SUA("🐛 SupportAgent"):::support
-        GEO("📈 GeoSEOAgent"):::geo
-        BA("✍️ BlogAgent"):::blog
-        IA("🖥️ InfraAgent"):::infra
+        SA("💼 SalesAgent")
+        FA("💰 FinanceAgent")
+        CA("🤝 CSAgent")
+        SUA("🐛 SupportAgent")
+        GEO("📈 GeoSEOAgent")
+        BA("✍️ BlogAgent")
+        IA("🖥️ InfraAgent")
     end
 
     SA  -->|DEAL_WON| FA & CA
@@ -298,8 +290,7 @@ Humans are only pulled in when they need to be — at exactly the right seniorit
 ```bash
 # 1. Clone
 git clone https://github.com/deveshchandiramani2006/switch-hackathon
-cd switch-hackathon/nexus
-# All commands below run from the nexus/ subfolder
+cd switch-hackathon
 
 # 2. Install
 pip install -r requirements.txt

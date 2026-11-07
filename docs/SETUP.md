@@ -19,8 +19,8 @@ Switch is the primary transport. Agents connect to Switch rooms via WebSocket, a
 ## 1. Clone and Configure
 
 ```bash
-git clone https://github.com/your-org/nexus
-cd nexus
+git clone https://github.com/deveshchandiramani2006/switch-hackathon
+cd switch-hackathon
 cp .env.example .env
 ```
 

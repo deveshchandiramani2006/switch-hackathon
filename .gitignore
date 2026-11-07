@@ -1,4 +1,16 @@
-docs/
+# personal notes / planning (never committed)
 imp/
-# Allow nexus/docs (product documentation)
-!nexus/docs/
+docs/extra/
+docs/summary/
+
+# python / environment
+.env
+*.pyc
+__pycache__/
+*.db
+*.sqlite3
+.DS_Store
+venv/
+.venv/
+nexus.db
+*.log
