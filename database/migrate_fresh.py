@@ -104,7 +104,7 @@ def seed_data(cur):
             "levels": [
                 {"slack_user": "@ravi",   "wait_hours": 1},
                 {"slack_user": "@devesh", "wait_hours": 2},
-                {"slack_user": "@devesh", "email": "tools@onestopengineering.in", "wait_hours": 4},
+                {"slack_user": "@devesh", "email": "tools@onestopengineering.in", "deal_value": "Rs 12.5L", "wait_hours": 4},
             ],
             "deal_size_tiers": {}
         },
