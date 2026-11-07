@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/nexus.png" alt="NEXUS" width="120" />
+
 # NEXUS
 
 **AI agents that handle the cross-team coordination work your team shouldn't be doing manually.**
